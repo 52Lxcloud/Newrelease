@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	configFile     = "/data/bot_configs.json"
+	configFile     = "/data/configs.json"
 	checkInterval  = 60 * time.Second
 	initialDelay   = 15 * time.Second
 	repoCheckDelay = 2 * time.Second

@@ -92,7 +92,7 @@ $COMPOSE_CMD up --build -d
 if [ "$($COMPOSE_CMD ps -q)" ]; then
     print_success "Deployment complete! Your bot is now running in the background."
     print_info "Your docker-compose.yml from GitHub was used directly."
-    print_info "Bot configuration is stored in the './data/bot_configs.json' file."
+    print_info "Bot configuration is stored in the './data/configs.json' file."
     echo
     print_info "To view live logs, run this command from the '${PROJECT_DIR}' directory:"
     echo "  $COMPOSE_CMD logs -f"
