@@ -38,15 +38,28 @@ func buildRepoListMessage() (string, error) {
 
 	var builder strings.Builder
 	builder.WriteString(listHeaderMessage)
-	builder.WriteString("\n")
+	builder.WriteString("\n\n")
 	for i, cfg := range configs {
 		repo := escapeMarkdown(cfg.Repo)
-		channelTitle := strings.TrimSpace(cfg.ChannelTitle)
-		if channelTitle == "" {
-			channelTitle = fmt.Sprintf("频道ID %d", cfg.ChannelID)
+		
+		// 分支信息
+		branchInfo := ""
+		if cfg.MonitorCommit && cfg.Branch != "" && cfg.Branch != "main" {
+			branchInfo = fmt.Sprintf(":%s", cfg.Branch)
 		}
-		channelTitle = escapeMarkdown(channelTitle)
+		
+		// 通知目标
+		target := "私聊"
+		if cfg.ChannelID != 0 {
+			channelTitle := strings.TrimSpace(cfg.ChannelTitle)
+			if channelTitle != "" {
+				target = escapeMarkdown(channelTitle)
+			} else {
+				target = fmt.Sprintf("频道 %d", cfg.ChannelID)
+			}
+		}
 
+		// 监控类型
 		var monitorType string
 		if cfg.MonitorRelease && cfg.MonitorCommit {
 			monitorType = "Release + Commit"
@@ -54,16 +67,12 @@ func buildRepoListMessage() (string, error) {
 			monitorType = "Release"
 		} else if cfg.MonitorCommit {
 			monitorType = "Commit"
-		} else {
-			monitorType = "未设置"
 		}
 
-		branchInfo := ""
-		if cfg.MonitorCommit && cfg.Branch != "" {
-			branchInfo = fmt.Sprintf(" \\[%s\\]", cfg.Branch)
-		}
-
-		builder.WriteString(fmt.Sprintf("%d. `%s` -> %s (%s%s)\n", i+1, repo, channelTitle, monitorType, branchInfo))
+		// 多行格式
+		builder.WriteString(fmt.Sprintf("*%d.* `%s%s`\n", i+1, repo, branchInfo))
+		builder.WriteString(fmt.Sprintf("└─ 监控: %s\n", monitorType))
+		builder.WriteString(fmt.Sprintf("└─ 通知: %s\n\n", target))
 	}
 	return strings.TrimSpace(builder.String()), nil
 }
