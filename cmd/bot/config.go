@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,7 +47,8 @@ func loadConfigs() ([]repoConfig, error) {
 
 	var configs []repoConfig
 	if err := json.Unmarshal(data, &configs); err != nil {
-		return []repoConfig{}, nil
+		log.Printf("ERROR: Failed to parse config file: %v", err)
+		return nil, fmt.Errorf("corrupt config file, please check %s: %w", configFile, err)
 	}
 	return configs, nil
 }

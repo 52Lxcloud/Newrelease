@@ -20,6 +20,14 @@ func main() {
 		log.Fatal("FATAL: ADMIN_ID is not a valid integer or is not set in the environment.")
 	}
 
+	// 读取 GitHub Token（可选）
+	githubToken = strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if githubToken != "" {
+		log.Printf("GitHub Token configured - API rate limit increased to 5000/hour")
+	} else {
+		log.Printf("No GitHub Token - using unauthenticated API (60 requests/hour)")
+	}
+
 	tg := newTelegramClient(token)
 	me, err := tg.getMe()
 	if err != nil {
@@ -28,6 +36,7 @@ func main() {
 	tg.botID = me.ID
 
 	log.Printf("Bot starting... Authorized Admin User ID is %d", adminID)
+
 	go scheduledChecker(tg, adminID)
 
 	offset := 0
@@ -44,22 +53,7 @@ func main() {
 				offset = upd.UpdateID + 1
 			}
 
-			// 处理回调查询
-			if upd.CallbackQuery != nil {
-				cb := upd.CallbackQuery
-				if cb.From == nil {
-					continue
-				}
-				if cb.From.ID != adminID {
-					log.Printf("Unauthorized access attempt by user %d (%s %s)", cb.From.ID, cb.From.FirstName, cb.From.LastName)
-					_ = tg.answerCallbackQuery(cb.ID, "没有权限", false)
-					continue
-				}
-				handleCallbackQuery(tg, cb, adminID)
-				continue
-			}
-
-			// 处理文本消息
+			// 只处理文本消息
 			if upd.Message == nil || upd.Message.From == nil || upd.Message.Chat == nil {
 				continue
 			}

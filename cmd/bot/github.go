@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,46 @@ type gitCommit struct {
 	} `json:"author"`
 }
 
+// githubToken 全局 GitHub Token（可选）
+var githubToken string
+
+// httpClient 全局 HTTP 客户端（复用连接）
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		DisableCompression:  false,
+	},
+}
+
+// setGitHubHeaders 设置 GitHub API 请求头
+func setGitHubHeaders(req *http.Request) {
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "newrelease")
+	if githubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+	}
+}
+
+// checkRateLimit 检查并记录 GitHub API Rate Limit
+func checkRateLimit(resp *http.Response) {
+	remaining := resp.Header.Get("X-RateLimit-Remaining")
+	limit := resp.Header.Get("X-RateLimit-Limit")
+	
+	if remaining != "" && limit != "" {
+		remainingNum, _ := strconv.Atoi(remaining)
+		limitNum, _ := strconv.Atoi(limit)
+		
+		if remainingNum < 100 {
+			log.Printf("⚠️  GitHub API rate limit LOW: %d/%d remaining", remainingNum, limitNum)
+		}
+		if remainingNum < 10 {
+			log.Printf("🚨 GitHub API rate limit CRITICAL: %d/%d remaining", remainingNum, limitNum)
+		}
+	}
+}
+
 // getLatestRelease 获取最新 Release
 func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
@@ -39,14 +80,16 @@ func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "newrelease")
+	setGitHubHeaders(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// 检查 Rate Limit
+	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
 		log.Printf("Repository %s not found (404). It might be private or have a typo.", repo)
@@ -70,14 +113,16 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "newrelease")
+	setGitHubHeaders(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// 检查 Rate Limit
+	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
 		log.Printf("Repository %s or branch %s not found (404).", repo, branch)
@@ -100,7 +145,6 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 // scheduledChecker 定时检查器
 func scheduledChecker(tg *telegramClient, adminID int64) {
 	time.Sleep(initialDelay)
-	client := &http.Client{Timeout: 10 * time.Second}
 
 	for {
 		log.Printf("Running scheduled check for new releases...")
@@ -110,9 +154,12 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 		} else if len(configs) == 0 {
 			log.Printf("No configurations found. Skipping check.")
 		} else {
+			// 批量保存标志
+			configChanged := false
+
 			for i := range configs {
 				if configs[i].MonitorRelease {
-					release, err := getLatestRelease(client, configs[i].Repo)
+					release, err := getLatestRelease(httpClient, configs[i].Repo)
 					if err != nil {
 						log.Printf("Error fetching GitHub release for %s: %v", configs[i].Repo, err)
 					} else if release != nil {
@@ -142,9 +189,7 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 
 							latestID := release.ID
 							configs[i].LastReleaseID = &latestID
-							if err := saveConfigs(configs); err != nil {
-								log.Printf("Failed to save configs: %v", err)
-							}
+							configChanged = true
 						}
 					}
 				}
@@ -154,42 +199,50 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 					if branch == "" {
 						branch = defaultBranch
 					}
-					commit, err := getLatestCommit(client, configs[i].Repo, branch)
+					commit, err := getLatestCommit(httpClient, configs[i].Repo, branch)
 					if err != nil {
 						log.Printf("Error fetching GitHub commit for %s (branch: %s): %v", configs[i].Repo, branch, err)
 					} else if commit != nil {
 						if configs[i].LastCommitSHA == nil || *configs[i].LastCommitSHA != commit.SHA {
 							if configs[i].LastCommitSHA != nil {
-								subject := strings.TrimSpace(commit.Commit.Message)
-								if subject == "" {
-									subject = commit.SHA
+								// 获取完整的 commit 消息
+								message := strings.TrimSpace(commit.Commit.Message)
+								if message == "" {
+									message = commit.SHA
 								}
-								subject = strings.SplitN(subject, "\n", 2)[0]
-								subject = escapeMarkdown(subject)
+								
+								// 限制消息长度，避免过长
+								maxLen := 500
+								if len(message) > maxLen {
+									message = message[:maxLen] + "..."
+								}
+								// 代码块内不需要转义 Markdown
 
-								author := strings.TrimSpace(commit.Commit.Author.Name)
-								if author == "" && commit.Author != nil {
-									author = commit.Author.Login
-								}
-								if author == "" {
-									author = "未知作者"
-								}
-								author = escapeMarkdown(author)
+		
+							author := strings.TrimSpace(commit.Commit.Author.Name)
+							if author == "" && commit.Author != nil {
+								author = commit.Author.Login
+							}
+							if author == "" {
+								author = "未知作者"
+							}
+							author = escapeMarkdown(author)
 
-								shortSHA := commit.SHA
-								if len(shortSHA) > 7 {
-									shortSHA = shortSHA[:7]
-								}
+							// 提取仓库名（只要 repo 部分，不要 owner）
+							repoParts := strings.Split(configs[i].Repo, "/")
+							repoName := configs[i].Repo
+							if len(repoParts) == 2 {
+								repoName = repoParts[1]
+							}
 
-								messageText := fmt.Sprintf(
-									commitMessageTmpl,
-									configs[i].Repo,
-									branch,
-									author,
-									subject,
-									shortSHA,
-									commit.HTMLURL,
-								)
+							messageText := fmt.Sprintf(
+								commitMessageTmpl,
+								repoName,
+								branch,
+								author,
+								message,
+								commit.HTMLURL,
+							)
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID
@@ -201,14 +254,21 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 
 							latestSHA := commit.SHA
 							configs[i].LastCommitSHA = &latestSHA
-							if err := saveConfigs(configs); err != nil {
-								log.Printf("Failed to save configs: %v", err)
-							}
+							configChanged = true
 						}
 					}
 				}
 
 				time.Sleep(repoCheckDelay)
+			}
+
+			// 批量保存：只在有变化时保存一次
+			if configChanged {
+				if err := saveConfigs(configs); err != nil {
+					log.Printf("Failed to save configs: %v", err)
+				} else {
+					log.Printf("Configurations updated and saved successfully")
+				}
 			}
 		}
 

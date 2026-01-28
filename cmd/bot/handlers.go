@@ -3,241 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 )
-
-// handleCallbackQuery 处理回调查询
-func handleCallbackQuery(tg *telegramClient, cb *callbackQuery, adminID int64) {
-	chatID := int64(0)
-	messageID := 0
-	if cb.Message != nil && cb.Message.Chat != nil {
-		chatID = cb.Message.Chat.ID
-		messageID = cb.Message.MessageID
-	}
-
-	switch cb.Data {
-	case callbackAddRepo:
-		handleAddRepo(tg, cb, chatID, messageID)
-	case callbackMonitorRelease:
-		handleMonitorRelease(tg, cb, chatID, messageID)
-	case callbackMonitorCommit:
-		handleMonitorCommit(tg, cb, chatID, messageID)
-	case callbackMonitorBoth:
-		handleMonitorBoth(tg, cb, chatID, messageID)
-	case callbackBranchMain:
-		handleBranchMain(tg, cb, chatID, messageID)
-	case callbackBranchMaster:
-		handleBranchMaster(tg, cb, chatID, messageID)
-	case callbackBranchCustom:
-		handleBranchCustom(tg, cb, chatID, messageID)
-	case callbackChannelPrivate:
-		handleChannelPrivate(tg, cb, chatID, messageID)
-	case callbackChannelCustom:
-		handleChannelCustom(tg, cb, chatID, messageID)
-	case callbackListRepos:
-		handleListRepos(tg, cb, chatID, messageID)
-	case callbackCancel:
-		handleCancel(tg, cb, chatID, messageID)
-	default:
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleAddRepo(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	setSession(setupSession{state: stateWaitingRepo, lastBotMsgID: messageID, chatID: chatID})
-	if chatID != 0 && messageID != 0 {
-		if err := tg.editMessageText(chatID, messageID, repoPromptMessage, telegramParseModeMarkdown, false, cancelKeyboard()); err != nil {
-			log.Printf("Failed to edit repo prompt message: %v", err)
-		}
-	}
-	_ = tg.answerCallbackQuery(cb.ID, "", false)
-}
-
-func handleMonitorRelease(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingMonitorType {
-		sess.state = stateWaitingChannelType
-		sess.monitorRelease = true
-		sess.monitorCommit = false
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, channelPromptMessage, telegramParseModeMarkdown, false, channelKeyboard()); err != nil {
-				log.Printf("Failed to edit channel prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleMonitorCommit(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingMonitorType {
-		sess.state = stateWaitingBranch
-		sess.monitorRelease = false
-		sess.monitorCommit = true
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, branchPromptMessage, telegramParseModeMarkdown, false, branchKeyboard()); err != nil {
-				log.Printf("Failed to edit branch prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleMonitorBoth(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingMonitorType {
-		sess.state = stateWaitingBranch
-		sess.monitorRelease = true
-		sess.monitorCommit = true
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, branchPromptMessage, telegramParseModeMarkdown, false, branchKeyboard()); err != nil {
-				log.Printf("Failed to edit branch prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleBranchMain(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	handleBranchSelection(tg, cb, chatID, messageID, "main")
-}
-
-func handleBranchMaster(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	handleBranchSelection(tg, cb, chatID, messageID, "master")
-}
-
-func handleBranchSelection(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int, branch string) {
-	sess := getSession()
-	if sess.state == stateWaitingBranch {
-		sess.state = stateWaitingChannelType
-		sess.branch = branch
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, channelPromptMessage, telegramParseModeMarkdown, false, channelKeyboard()); err != nil {
-				log.Printf("Failed to edit channel prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleBranchCustom(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingBranch {
-		sess.state = stateWaitingBranchCustom
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, branchCustomPromptMessage, telegramParseModeMarkdown, false, cancelKeyboard()); err != nil {
-				log.Printf("Failed to edit branch custom prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleChannelPrivate(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingChannelType {
-		configs, err := loadConfigs()
-		if err != nil {
-			log.Printf("Failed to load configs: %v", err)
-			if chatID != 0 && messageID != 0 {
-				if err := tg.editMessageText(chatID, messageID, unexpectedErrorMessage, "", false, startKeyboard()); err != nil {
-					log.Printf("Failed to edit error message: %v", err)
-				}
-			}
-			_ = tg.answerCallbackQuery(cb.ID, "", false)
-			return
-		}
-
-		newConfig := repoConfig{
-			Repo:           sess.repo,
-			ChannelID:      0,
-			ChannelTitle:   "私聊",
-			MonitorRelease: sess.monitorRelease,
-			MonitorCommit:  sess.monitorCommit,
-			Branch:         sess.branch,
-			LastReleaseID:  nil,
-			LastCommitSHA:  nil,
-		}
-		configs = append(configs, newConfig)
-		if err := saveConfigs(configs); err != nil {
-			log.Printf("Failed to save configs: %v", err)
-			if chatID != 0 && messageID != 0 {
-				if err := tg.editMessageText(chatID, messageID, unexpectedErrorMessage, "", false, startKeyboard()); err != nil {
-					log.Printf("Failed to edit error message: %v", err)
-				}
-			}
-			_ = tg.answerCallbackQuery(cb.ID, "", false)
-			return
-		}
-
-		successMessage := buildSuccessMessage(sess, "私聊")
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, successMessage, telegramParseModeMarkdown, false, startKeyboard()); err != nil {
-				log.Printf("Failed to edit success message: %v", err)
-			}
-		}
-		setSession(setupSession{state: stateIdle})
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleChannelCustom(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	sess := getSession()
-	if sess.state == stateWaitingChannelType {
-		sess.state = stateWaitingChannel
-		sess.lastBotMsgID = messageID
-		sess.chatID = chatID
-		setSession(sess)
-		if chatID != 0 && messageID != 0 {
-			if err := tg.editMessageText(chatID, messageID, channelCustomPromptMessage, telegramParseModeMarkdown, false, cancelKeyboard()); err != nil {
-				log.Printf("Failed to edit channel custom prompt message: %v", err)
-			}
-		}
-		_ = tg.answerCallbackQuery(cb.ID, "", false)
-	}
-}
-
-func handleListRepos(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	if chatID != 0 && messageID != 0 {
-		messageText, err := buildRepoListMessage()
-		if err != nil {
-			log.Printf("Failed to build repo list: %v", err)
-			if err := tg.editMessageText(chatID, messageID, unexpectedErrorMessage, "", false, startKeyboard()); err != nil {
-				log.Printf("Failed to edit repo list error message: %v", err)
-			}
-		} else {
-			if err := tg.editMessageText(chatID, messageID, messageText, telegramParseModeMarkdown, false, startKeyboard()); err != nil {
-				log.Printf("Failed to edit repo list message: %v", err)
-			}
-		}
-	}
-	_ = tg.answerCallbackQuery(cb.ID, "", false)
-}
-
-func handleCancel(tg *telegramClient, cb *callbackQuery, chatID int64, messageID int) {
-	setSession(setupSession{state: stateIdle})
-	if chatID != 0 && messageID != 0 {
-		if err := tg.editMessageText(chatID, messageID, cancelMessage, "", false, startKeyboard()); err != nil {
-			log.Printf("Failed to edit cancel message: %v", err)
-		}
-	}
-	_ = tg.answerCallbackQuery(cb.ID, "", false)
-}
 
 // handleMessage 处理文本消息
 func handleMessage(tg *telegramClient, msg *message, adminID int64) {
@@ -246,192 +14,253 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 		return
 	}
 
-	switch parseCommand(text) {
-	case "/start":
-		setSession(setupSession{state: stateIdle})
-		if _, err := tg.sendMessage(msg.Chat.ID, startMessage, telegramParseModeMarkdown, false, startKeyboard()); err != nil {
-			log.Printf("Failed to send start message: %v", err)
-		}
-		return
+	cmd := parseCommand(text)
+	switch cmd {
+	case "/start", "/help":
+		handleStart(tg, msg.Chat.ID)
 	case "/list":
-		messageText, err := buildRepoListMessage()
-		if err != nil {
-			log.Printf("Failed to build repo list: %v", err)
-			if _, err := tg.sendMessage(msg.Chat.ID, unexpectedErrorMessage, "", false, startKeyboard()); err != nil {
-				log.Printf("Failed to send repo list error message: %v", err)
-			}
-		} else {
-			if _, err := tg.sendMessage(msg.Chat.ID, messageText, telegramParseModeMarkdown, false, startKeyboard()); err != nil {
-				log.Printf("Failed to send repo list message: %v", err)
-			}
-		}
-		return
-	case "/cancel":
-		setSession(setupSession{state: stateIdle})
-		if _, err := tg.sendMessage(msg.Chat.ID, cancelMessage, "", false, startKeyboard()); err != nil {
-			log.Printf("Failed to send cancel message: %v", err)
-		}
-		return
-	}
-
-	sess := getSession()
-	switch sess.state {
-	case stateWaitingRepo:
-		handleWaitingRepo(tg, msg, sess, text)
-	case stateWaitingBranchCustom:
-		handleWaitingBranchCustom(tg, msg, sess, text)
-	case stateWaitingChannel:
-		handleWaitingChannel(tg, msg, sess, text)
+		handleList(tg, msg.Chat.ID)
+	case "/add":
+		handleAdd(tg, msg.Chat.ID, text)
+	case "/delete", "/del", "/remove":
+		handleDelete(tg, msg.Chat.ID, text)
+	default:
+		// 未知命令，不回复
 	}
 }
 
-func handleWaitingRepo(tg *telegramClient, msg *message, sess setupSession, text string) {
-	// 删除之前的提示消息
-	if sess.lastBotMsgID != 0 && sess.chatID != 0 {
-		_ = tg.deleteMessage(sess.chatID, sess.lastBotMsgID)
-	}
+// handleStart 处理 /start 命令
+func handleStart(tg *telegramClient, chatID int64) {
+	helpText := "*GitHub Release & Commit 监控机器人*\n\n" +
+		"*可用命令：*\n\n" +
+		"• `/list` - 查看所有监控的仓库\n\n" +
+		"• `/add` - 添加仓库监控\n" +
+		"  格式：`/add owner/repo [选项]`\n  \n" +
+		"  选项：\n" +
+		"  `--release` 或 `-r` : 监控 Release\n" +
+		"  `--commit` 或 `-c` : 监控 Commit\n" +
+		"  `--branch <分支名>` 或 `-b <分支名>` : 指定分支（默认 main）\n" +
+		"  `@channel` : 指定发送到的频道（默认私聊）\n  \n" +
+		"  示例：\n" +
+		"  `/add aiogram/aiogram -r -c`\n" +
+		"  `/add owner/repo --release --branch master @mychannel`\n\n" +
+		"• `/delete <序号>` - 删除监控\n" +
+		"  示例：`/delete 1`\n\n" +
+		"*注意：*\n" +
+		"• 默认监控 Release 和 Commit\n" +
+		"• 默认分支为 main\n" +
+		"• 频道需要先添加机器人为管理员"
 
-	if !repoRegexp.MatchString(text) {
-		_ = tg.deleteMessage(msg.Chat.ID, msg.MessageID)
-		newMsg, err := tg.sendMessage(msg.Chat.ID, invalidRepoMessage, telegramParseModeMarkdown, false, cancelKeyboard())
-		if err != nil {
-			log.Printf("Failed to send invalid repo message: %v", err)
-		} else {
-			sess.lastBotMsgID = newMsg.MessageID
-			sess.chatID = msg.Chat.ID
-			setSession(sess)
-		}
-		return
-	}
-
-	sess.state = stateWaitingMonitorType
-	sess.repo = text
-	setSession(sess)
-	if _, err := tg.sendMessage(msg.Chat.ID, monitorTypePromptMessage, telegramParseModeMarkdown, false, monitorTypeKeyboard()); err != nil {
-		log.Printf("Failed to send monitor type prompt message: %v", err)
-	}
+	tg.sendMessage(chatID, helpText, telegramParseModeMarkdown, false, "")
 }
 
-func handleWaitingBranchCustom(tg *telegramClient, msg *message, sess setupSession, text string) {
-	branch := strings.TrimSpace(text)
-	if branch == "" {
-		branch = defaultBranch
-	}
-	sess.state = stateWaitingChannelType
-	sess.branch = branch
-	setSession(sess)
-	if _, err := tg.sendMessage(msg.Chat.ID, channelPromptMessage, telegramParseModeMarkdown, false, channelKeyboard()); err != nil {
-		log.Printf("Failed to send channel prompt message: %v", err)
-	}
-}
-
-func handleWaitingChannel(tg *telegramClient, msg *message, sess setupSession, text string) {
-	// 删除之前的提示消息
-	if sess.lastBotMsgID != 0 && sess.chatID != 0 {
-		_ = tg.deleteMessage(sess.chatID, sess.lastBotMsgID)
-	}
-
-	channelName := text
-	tgChat, err := tg.getChat(channelName)
+// handleList 处理 /list 命令
+func handleList(tg *telegramClient, chatID int64) {
+	msg, err := buildRepoListMessage()
 	if err != nil {
-		newMsg, err := tg.sendMessage(msg.Chat.ID, channelNotFoundMessage, "", false, cancelKeyboard())
-		if err != nil {
-			log.Printf("Failed to send channel not found message: %v", err)
-		} else {
-			sess.lastBotMsgID = newMsg.MessageID
-			sess.chatID = msg.Chat.ID
-			setSession(sess)
-		}
+		log.Printf("Failed to build repo list: %v", err)
+		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		return
+	}
+	tg.sendMessage(chatID, msg, telegramParseModeMarkdown, false, "")
+}
+
+// handleAdd 处理 /add 命令
+func handleAdd(tg *telegramClient, chatID int64, text string) {
+	// 解析命令参数
+	args := strings.Fields(text)
+	if len(args) < 2 {
+		tg.sendMessage(chatID, "❌ 格式错误！\n\n使用方法：`/add owner/repo [选项]`\n\n发送 `/start` 查看详细帮助。", telegramParseModeMarkdown, false, "")
 		return
 	}
 
-	admins, err := tg.getChatAdministrators(tgChat.ID)
+	repo := args[1]
+	if !repoRegexp.MatchString(repo) {
+		tg.sendMessage(chatID, invalidRepoMessage, telegramParseModeMarkdown, false, "")
+		return
+	}
+
+	// 解析选项
+	monitorRelease := false
+	monitorCommit := false
+	branch := defaultBranch
+	channelUsername := ""
+
+	for i := 2; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--release" || arg == "-r":
+			monitorRelease = true
+		case arg == "--commit" || arg == "-c":
+			monitorCommit = true
+		case arg == "--branch" || arg == "-b":
+			if i+1 < len(args) {
+				branch = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "@"):
+			channelUsername = arg
+		}
+	}
+
+	// 如果没有指定监控类型，默认两者都监控
+	if !monitorRelease && !monitorCommit {
+		monitorRelease = true
+		monitorCommit = true
+	}
+
+	// 处理频道
+	var channelID int64
+	var channelTitle string
+	if channelUsername != "" {
+		chat, err := tg.getChat(channelUsername)
+		if err != nil {
+			log.Printf("Failed to get chat %s: %v", channelUsername, err)
+			tg.sendMessage(chatID, channelNotFoundMessage, telegramParseModeMarkdown, false, "")
+			return
+		}
+		
+		// 检查机器人是否为管理员
+		admins, err := tg.getChatAdministrators(chat.ID)
+		if err != nil {
+			tg.sendMessage(chatID, botNotAdminMessage, telegramParseModeMarkdown, false, "")
+			return
+		}
+		
+		isAdmin := false
+		for _, admin := range admins {
+			if admin.User.ID == tg.botID {
+				isAdmin = true
+				break
+			}
+		}
+		
+		if !isAdmin {
+			tg.sendMessage(chatID, botNotAdminMessage, telegramParseModeMarkdown, false, "")
+			return
+		}
+		
+		channelID = chat.ID
+		channelTitle = chat.Title
+	} else {
+		channelTitle = "私聊"
+	}
+
+	// 加载现有配置
+	configs, err := loadConfigs()
 	if err != nil {
-		log.Printf("Error validating channel %s: %v", channelName, err)
-		newMsg, err := tg.sendMessage(msg.Chat.ID, unexpectedErrorMessage, "", false, cancelKeyboard())
-		if err != nil {
-			log.Printf("Failed to send unexpected error message: %v", err)
-		} else {
-			sess.lastBotMsgID = newMsg.MessageID
-			sess.chatID = msg.Chat.ID
-			setSession(sess)
-		}
+		log.Printf("Failed to load configs: %v", err)
+		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
 		return
 	}
 
-	isBotAdmin := false
-	for _, admin := range admins {
-		if admin.User.ID == tg.botID {
-			isBotAdmin = true
-			break
-		}
+	// 创建新配置
+	newConfig := repoConfig{
+		Repo:           repo,
+		ChannelID:      channelID,
+		ChannelTitle:   channelTitle,
+		MonitorRelease: monitorRelease,
+		MonitorCommit:  monitorCommit,
+		Branch:         branch,
 	}
-	if !isBotAdmin {
-		newMsg, err := tg.sendMessage(msg.Chat.ID, botNotAdminMessage, "", false, cancelKeyboard())
-		if err != nil {
-			log.Printf("Failed to send bot not admin message: %v", err)
-		} else {
-			sess.lastBotMsgID = newMsg.MessageID
-			sess.chatID = msg.Chat.ID
-			setSession(sess)
-		}
+
+	// 检查重复
+	if isDuplicateConfig(configs, newConfig) {
+		tg.sendMessage(chatID, repoExistsMessage, telegramParseModeMarkdown, false, "")
+		return
+	}
+
+	// 添加并保存
+	configs = append(configs, newConfig)
+	if err := saveConfigs(configs); err != nil {
+		log.Printf("Failed to save configs: %v", err)
+		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		return
+	}
+
+	// 构建成功消息
+	notifyWay := channelTitle
+	if channelTitle == "" {
+		notifyWay = "私聊"
+	}
+
+	monitorTypeStr := ""
+	if monitorRelease && monitorCommit {
+		monitorTypeStr = "Release + Commit"
+	} else if monitorRelease {
+		monitorTypeStr = "Release"
+	} else if monitorCommit {
+		monitorTypeStr = "Commit"
+	}
+
+	branchInfo := ""
+	if monitorCommit {
+		branchInfo = fmt.Sprintf("\n*分支*: `%s`", branch)
+	}
+
+	successMsg := fmt.Sprintf(setupSuccessMessageTmpl,
+		escapeMarkdown(repo),
+		escapeMarkdown(notifyWay),
+		monitorTypeStr,
+		branchInfo,
+	)
+
+	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
+	log.Printf("Added repo: %s (Release: %v, Commit: %v, Branch: %s, Channel: %s)",
+		repo, monitorRelease, monitorCommit, branch, notifyWay)
+}
+
+// handleDelete 处理 /delete 命令
+func handleDelete(tg *telegramClient, chatID int64, text string) {
+	args := strings.Fields(text)
+	if len(args) < 2 {
+		tg.sendMessage(chatID, "❌ 格式错误！\n\n使用方法：`/delete <序号>`\n\n先用 `/list` 查看序号。", telegramParseModeMarkdown, false, "")
+		return
+	}
+
+	index, err := strconv.Atoi(args[1])
+	if err != nil || index < 1 {
+		tg.sendMessage(chatID, "❌ 序号必须是大于 0 的数字！", "", false, "")
 		return
 	}
 
 	configs, err := loadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
-		if _, err := tg.sendMessage(msg.Chat.ID, unexpectedErrorMessage, "", false, cancelKeyboard()); err != nil {
-			log.Printf("Failed to send unexpected error message: %v", err)
-		}
+		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
 		return
 	}
 
-	newConfig := repoConfig{
-		Repo:           sess.repo,
-		ChannelID:      tgChat.ID,
-		ChannelTitle:   tgChat.Title,
-		MonitorRelease: sess.monitorRelease,
-		MonitorCommit:  sess.monitorCommit,
-		Branch:         sess.branch,
-		LastReleaseID:  nil,
-		LastCommitSHA:  nil,
+	if index > len(configs) {
+		tg.sendMessage(chatID, fmt.Sprintf("❌ 序号超出范围！当前只有 %d 个仓库。", len(configs)), "", false, "")
+		return
 	}
-	configs = append(configs, newConfig)
+
+	// 删除配置
+	deletedRepo := configs[index-1].Repo
+	configs = append(configs[:index-1], configs[index:]...)
+
 	if err := saveConfigs(configs); err != nil {
 		log.Printf("Failed to save configs: %v", err)
-		if _, err := tg.sendMessage(msg.Chat.ID, unexpectedErrorMessage, "", false, cancelKeyboard()); err != nil {
-			log.Printf("Failed to send unexpected error message: %v", err)
-		}
+		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
 		return
 	}
 
-	successMessage := buildSuccessMessage(sess, escapeMarkdown(tgChat.Title))
-	if _, err := tg.sendMessage(msg.Chat.ID, successMessage, telegramParseModeMarkdown, false, startKeyboard()); err != nil {
-		log.Printf("Failed to send success message: %v", err)
-	}
-	setSession(setupSession{state: stateIdle})
+	successMsg := fmt.Sprintf(deleteSuccessMessageTmpl, escapeMarkdown(deletedRepo))
+	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
+	log.Printf("Deleted repo: %s", deletedRepo)
 }
 
-// buildSuccessMessage 构建设置成功消息
-func buildSuccessMessage(sess setupSession, channelTitle string) string {
-	var monitorTypeDesc string
-	if sess.monitorRelease && sess.monitorCommit {
-		monitorTypeDesc = "Release + Commit"
-	} else if sess.monitorRelease {
-		monitorTypeDesc = "Release"
-	} else {
-		monitorTypeDesc = "Commit"
-	}
-
-	branchInfo := ""
-	if sess.monitorCommit {
-		branch := sess.branch
-		if branch == "" {
-			branch = defaultBranch
+// isDuplicateConfig 检查是否存在重复配置
+func isDuplicateConfig(configs []repoConfig, newConfig repoConfig) bool {
+	for _, cfg := range configs {
+		if cfg.Repo == newConfig.Repo &&
+			cfg.ChannelID == newConfig.ChannelID &&
+			cfg.MonitorRelease == newConfig.MonitorRelease &&
+			cfg.MonitorCommit == newConfig.MonitorCommit &&
+			cfg.Branch == newConfig.Branch {
+			return true
 		}
-		branchInfo = fmt.Sprintf("*分支*: `%s`", branch)
 	}
-
-	return fmt.Sprintf(setupSuccessMessageTmpl, sess.repo, channelTitle, monitorTypeDesc, branchInfo)
+	return false
 }

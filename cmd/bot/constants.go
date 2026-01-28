@@ -18,51 +18,40 @@ const (
 // 正则表达式
 var repoRegexp = regexp.MustCompile(`^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$`)
 
-// Markdown 转义器
+// Markdown 转义器 - Telegram Markdown 模式只需转义这几个字符
 var markdownEscaper = strings.NewReplacer(
-	"\\", "\\\\",
-	"_", "\\_",
-	"*", "\\*",
-	"`", "\\`",
-	"[", "\\[",
-	"]", "\\]",
+	"_", "\\_",  // 斜体标记
+	"*", "\\*",  // 粗体标记
+	"`", "\\`",  // 代码标记
+	"[", "\\[",  // 链接标记
 )
 
 // 消息模板
 const (
-	startMessage               = "你好，管理员！请选择一个操作："
-	repoPromptMessage          = "请发送你要监控的仓库。\n格式为 `owner/repository`（例如：`aiogram/aiogram`）。"
-	cancelMessage              = "已取消设置。你可以发送 /start 重新开始。"
-	listEmptyMessage           = "当前没有已添加的仓库。"
-	listHeaderMessage          = "已添加的仓库："
-	invalidRepoMessage         = "格式不正确。\n请使用 `owner/repository` 的格式后重试。"
-	monitorTypePromptMessage   = "请选择要监控的类型："
-	branchPromptMessage        = "请选择要监控的分支："
-	branchCustomPromptMessage  = "请输入要监控的分支名称："
-	channelPromptMessage       = "请选择通知方式："
-	channelCustomPromptMessage = "请发送频道的用户名（例如：`@yourchannel`）。"
-	channelAcceptedMessage     = "好的！现在，请把本机器人添加为你的 Telegram 频道*管理员*并授予「发布消息」权限。\n\n完成后，请发送频道的用户名（例如：`@yourchannel`）。"
-	channelNotFoundMessage     = "找不到该频道。请检查用户名，并确保已添加机器人。"
-	botNotAdminMessage         = "我还不是该频道的管理员。请确保机器人拥有"发布消息"权限后再试。"
-	unexpectedErrorMessage     = "发生了未知错误，请稍后再试。"
-	setupSuccessMessageTmpl    = "✅ 设置成功！\n\n*仓库*: `%s`\n*通知方式*: %s\n*监控类型*: %s\n%s"
-	repoAcceptedMessageTmpl    = "好的！我将监控 `%s`。\n\n现在，请把本机器人添加为你的 Telegram 频道*管理员*并授予"发布消息"权限。\n\n完成后，请发送频道的用户名（例如：`@yourchannel`）。"
-	releaseMessageTmpl         = "*新版本发布：%s*\n\n*仓库*: `%s`\n*标签*: `%s`\n\n[在 GitHub 查看 Release](%s)"
-	commitMessageTmpl          = "*新提交*\n\n*仓库*: `%s`\n*分支*: `%s`\n*作者*: %s\n*信息*: %s\n*提交*: `%s`\n\n[查看提交](%s)"
-	telegramParseModeMarkdown  = "Markdown"
-)
-
-// Callback 数据标识
-const (
-	callbackAddRepo        = "action:add_repo"
-	callbackListRepos      = "action:list_repos"
-	callbackCancel         = "action:cancel"
-	callbackMonitorRelease = "monitor:release"
-	callbackMonitorCommit  = "monitor:commit"
-	callbackMonitorBoth    = "monitor:both"
-	callbackBranchMain     = "branch:main"
-	callbackBranchMaster   = "branch:master"
-	callbackBranchCustom   = "branch:custom"
-	callbackChannelPrivate = "channel:private"
-	callbackChannelCustom  = "channel:custom"
+	listEmptyMessage           = "📭 当前没有已添加的仓库。\n\n使用 `/add owner/repo` 添加监控"
+	listHeaderMessage          = "📚 *已监控的仓库*"
+	invalidRepoMessage         = "❌ *格式错误*\n\n请使用 `owner/repository` 格式\n例如：`aiogram/aiogram`"
+	repoExistsMessage          = "⚠️ *该仓库已存在相同配置*\n无需重复添加"
+	deleteSuccessMessageTmpl   = "🗑️ *删除成功*\n\n已停止监控 `%s`"
+	channelNotFoundMessage     = "❌ *频道不存在*\n\n请检查用户名，并确保已添加机器人为管理员"
+	botNotAdminMessage         = "⚠️ *权限不足*\n\n请将机器人添加为频道管理员\n并授予 \"发布消息\" 权限"
+	unexpectedErrorMessage     = "❌ *操作失败*\n\n发生未知错误，请稍后重试"
+	setupSuccessMessageTmpl    = "✅ *添加成功*\n\n📦 *仓库*: `%s`\n📢 *通知*: %s\n🔍 *监控*: %s%s\n\n监控已启动，将在发现更新时通知你"
+	
+	// Release 通知模板 - 更醒目的样式
+	releaseMessageTmpl = "*新版本*\n\n" +
+		"📦 *%s*\n" +
+		"└─ `%s`\n\n" +
+		"🏷️ *版本*: `%s`\n\n" +
+		"[查看详情](%s)"
+	
+	// Commit 通知模板 - 极简风格
+	commitMessageTmpl = "*新提交*\n\n" +
+		"📦 *%s*\n" +
+		"└─ `%s`\n" +
+		"└─ %s\n\n" +
+		"```\n%s\n```\n\n" +
+		"[查看详情](%s)"
+	
+	telegramParseModeMarkdown = "Markdown"
 )

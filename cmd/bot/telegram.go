@@ -21,9 +21,8 @@ type telegramResponse struct {
 
 // Telegram 消息相关结构
 type update struct {
-	UpdateID      int            `json:"update_id"`
-	Message       *message       `json:"message"`
-	CallbackQuery *callbackQuery `json:"callback_query"`
+	UpdateID int      `json:"update_id"`
+	Message  *message `json:"message"`
 }
 
 type message struct {
@@ -49,13 +48,6 @@ type chat struct {
 
 type chatMember struct {
 	User user `json:"user"`
-}
-
-type callbackQuery struct {
-	ID      string   `json:"id"`
-	From    *user    `json:"from"`
-	Message *message `json:"message"`
-	Data    string   `json:"data"`
 }
 
 // telegramClient Telegram 客户端
@@ -126,7 +118,7 @@ func (c *telegramClient) getUpdates(offset int) ([]update, error) {
 		params.Set("offset", strconv.Itoa(offset))
 	}
 	params.Set("timeout", "60")
-	params.Set("allowed_updates", `["message","callback_query"]`)
+	params.Set("allowed_updates", `["message"]`)
 
 	var updates []update
 	if err := c.call("getUpdates", params, &updates); err != nil {
@@ -156,32 +148,6 @@ func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disab
 	return &msg, nil
 }
 
-// editMessageText 编辑消息
-func (c *telegramClient) editMessageText(chatID int64, messageID int, text, parseMode string, disablePreview bool, replyMarkup string) error {
-	params := url.Values{}
-	params.Set("chat_id", strconv.FormatInt(chatID, 10))
-	params.Set("message_id", strconv.Itoa(messageID))
-	params.Set("text", text)
-	if parseMode != "" {
-		params.Set("parse_mode", parseMode)
-	}
-	if disablePreview {
-		params.Set("disable_web_page_preview", "true")
-	}
-	if replyMarkup != "" {
-		params.Set("reply_markup", replyMarkup)
-	}
-	return c.call("editMessageText", params, nil)
-}
-
-// deleteMessage 删除消息
-func (c *telegramClient) deleteMessage(chatID int64, messageID int) error {
-	params := url.Values{}
-	params.Set("chat_id", strconv.FormatInt(chatID, 10))
-	params.Set("message_id", strconv.Itoa(messageID))
-	return c.call("deleteMessage", params, nil)
-}
-
 // getChat 获取频道/群聊信息
 func (c *telegramClient) getChat(chatIDOrUsername string) (*chat, error) {
 	params := url.Values{}
@@ -202,17 +168,4 @@ func (c *telegramClient) getChatAdministrators(chatID int64) ([]chatMember, erro
 		return nil, err
 	}
 	return admins, nil
-}
-
-// answerCallbackQuery 响应回调查询
-func (c *telegramClient) answerCallbackQuery(callbackID, text string, showAlert bool) error {
-	params := url.Values{}
-	params.Set("callback_query_id", callbackID)
-	if text != "" {
-		params.Set("text", text)
-	}
-	if showAlert {
-		params.Set("show_alert", "true")
-	}
-	return c.call("answerCallbackQuery", params, nil)
 }
