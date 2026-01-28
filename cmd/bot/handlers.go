@@ -35,21 +35,22 @@ func handleStart(tg *telegramClient, chatID int64) {
 		"*可用命令：*\n\n" +
 		"• `/list` - 查看所有监控的仓库\n\n" +
 		"• `/add` - 添加仓库监控\n" +
-		"  格式：`/add owner/repo [选项]`\n  \n" +
+		"  格式：`/add owner/repo[:branch] [选项]`\n  \n" +
 		"  选项：\n" +
-		"  `--release` 或 `-r` : 监控 Release\n" +
-		"  `--commit` 或 `-c` : 监控 Commit\n" +
-		"  `--branch <分支名>` 或 `-b <分支名>` : 指定分支（默认 main）\n" +
-		"  `@channel` : 指定发送到的频道（默认私聊）\n  \n" +
+		"  `-r` : 监控 Release\n" +
+		"  `-c` : 监控 Commit\n" +
+		"  `@channel` : 发送到指定频道（默认私聊）\n  \n" +
 		"  示例：\n" +
-		"  `/add aiogram/aiogram -r -c`\n" +
-		"  `/add owner/repo --release --branch master @mychannel`\n\n" +
+		"  `/add nginx/nginx:master -r`\n" +
+		"  `/add golang/go:dev -c`\n" +
+		"  `/add facebook/react`\n\n" +
 		"• `/delete <序号>` - 删除监控\n" +
 		"  示例：`/delete 1`\n\n" +
-		"*注意：*\n" +
+		"*提示：*\n" +
 		"• 默认监控 Release 和 Commit\n" +
 		"• 默认分支为 main\n" +
-		"• 频道需要先添加机器人为管理员"
+		"• 用 `:branch` 快速指定其他分支\n" +
+		"• 频道需先添加机器人为管理员"
 
 	tg.sendMessage(chatID, helpText, telegramParseModeMarkdown, false, "")
 }
@@ -75,38 +76,46 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	}
 
 	repo := args[1]
+	
+	// 支持 owner/repo:branch 格式
+	branch := "" // Initialize branch here
+	if strings.Contains(repo, ":") {
+		parts := strings.SplitN(repo, ":", 2)
+		repo = parts[0]
+		branch = parts[1]
+	}
+
 	if !repoRegexp.MatchString(repo) {
 		tg.sendMessage(chatID, invalidRepoMessage, telegramParseModeMarkdown, false, "")
 		return
 	}
 
-	// 解析选项
 	monitorRelease := false
 	monitorCommit := false
-	branch := defaultBranch
 	channelUsername := ""
 
+	// 解析参数
 	for i := 2; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "--release" || arg == "-r":
+		switch args[i] {
+		case "-r":
 			monitorRelease = true
-		case arg == "--commit" || arg == "-c":
+		case "-c":
 			monitorCommit = true
-		case arg == "--branch" || arg == "-b":
-			if i+1 < len(args) {
-				branch = args[i+1]
-				i++
+		default:
+			if strings.HasPrefix(args[i], "@") {
+				channelUsername = args[i]
 			}
-		case strings.HasPrefix(arg, "@"):
-			channelUsername = arg
 		}
 	}
-
 	// 如果没有指定监控类型，默认两者都监控
 	if !monitorRelease && !monitorCommit {
 		monitorRelease = true
 		monitorCommit = true
+	}
+
+	// 如果 branch 仍然为空，则使用默认分支
+	if branch == "" {
+		branch = defaultBranch
 	}
 
 	// 处理频道
