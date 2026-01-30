@@ -1,7 +1,10 @@
 services:
   bot:
-    build: .
+    image: 52lxcloud/newrelease:latest
     restart: unless-stopped
-    env_file: .env
+    environment:
+      - TELEGRAM_BOT_TOKEN=机器人token
+      - ADMIN_ID=管理员ID
+      - GITHUB_TOKEN=githubtoken
     volumes:
       - ./data:/data
