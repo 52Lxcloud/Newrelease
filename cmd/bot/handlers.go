@@ -209,7 +209,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 
 	branchInfo := ""
 	if monitorCommit {
-		branchInfo = fmt.Sprintf("\n*分支*: `%s`", branch)
+		branchInfo = fmt.Sprintf("\n🔀 *分支*: `%s`", branch)
 	}
 
 	successMsg := fmt.Sprintf(setupSuccessMessageTmpl,
