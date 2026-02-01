@@ -48,7 +48,6 @@ func handleStart(tg *telegramClient, chatID int64) {
 		"  示例：`/delete 1`\n\n" +
 		"*提示：*\n" +
 		"• 默认监控 Release 和 Commit\n" +
-		"• 默认分支为 main\n" +
 		"• 用 `:branch` 快速指定其他分支\n" +
 		"• 频道需先添加机器人为管理员"
 
@@ -113,9 +112,15 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		monitorCommit = true
 	}
 
-	// 如果 branch 仍然为空，则使用默认分支
-	if branch == "" {
-		branch = defaultBranch
+	// 如果 branch 仍然为空，则从 GitHub 获取默认分支
+	if branch == "" && monitorCommit {
+		defaultBr, err := getRepoDefaultBranch(httpClient, repo)
+		if err != nil {
+			log.Printf("Failed to get default branch for %s: %v, using 'main'", repo, err)
+			branch = "main"
+		} else {
+			branch = defaultBr
+		}
 	}
 
 	// 处理频道

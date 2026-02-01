@@ -23,14 +23,12 @@ type gitCommit struct {
 	SHA     string `json:"sha"`
 	HTMLURL string `json:"html_url"`
 	Commit  struct {
-		Author struct {
-			Name string `json:"name"`
-		} `json:"author"`
 		Message string `json:"message"`
 	} `json:"commit"`
-	Author *struct {
-		Login string `json:"login"`
-	} `json:"author"`
+}
+
+type gitHubRepo struct {
+	DefaultBranch string `json:"default_branch"`
 }
 
 // githubToken 全局 GitHub Token（可选）
@@ -40,9 +38,9 @@ var githubToken string
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 	Transport: &http.Transport{
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableCompression:  false,
+		MaxIdleConns:       10,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: false,
 	},
 }
 
@@ -59,11 +57,11 @@ func setGitHubHeaders(req *http.Request) {
 func checkRateLimit(resp *http.Response) {
 	remaining := resp.Header.Get("X-RateLimit-Remaining")
 	limit := resp.Header.Get("X-RateLimit-Limit")
-	
+
 	if remaining != "" && limit != "" {
 		remainingNum, _ := strconv.Atoi(remaining)
 		limitNum, _ := strconv.Atoi(limit)
-		
+
 		if remainingNum < 100 {
 			log.Printf("⚠️  GitHub API rate limit LOW: %d/%d remaining", remainingNum, limitNum)
 		}
@@ -75,8 +73,8 @@ func checkRateLimit(resp *http.Response) {
 
 // getLatestRelease 获取最新 Release
 func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	req, err := http.NewRequest("GET", url, nil)
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +86,9 @@ func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) 
 	}
 	defer resp.Body.Close()
 
-	// 检查 Rate Limit
 	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
-		log.Printf("Repository %s not found (404). It might be private or have a typo.", repo)
 		return nil, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -121,11 +117,9 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 	}
 	defer resp.Body.Close()
 
-	// 检查 Rate Limit
 	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
-		log.Printf("Repository %s or branch %s not found (404).", repo, branch)
 		return nil, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -142,50 +136,65 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 	return &commits[0], nil
 }
 
+// getRepoDefaultBranch 获取仓库的默认分支
+func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	setGitHubHeaders(req)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	checkRateLimit(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get repo info: status %d", resp.StatusCode)
+	}
+
+	var repoInfo gitHubRepo
+	if err := json.NewDecoder(resp.Body).Decode(&repoInfo); err != nil {
+		return "", err
+	}
+	return repoInfo.DefaultBranch, nil
+}
+
 // scheduledChecker 定时检查器
 func scheduledChecker(tg *telegramClient, adminID int64) {
 	time.Sleep(initialDelay)
 
 	for {
-		log.Printf("Running scheduled check for new releases...")
+		log.Printf("Running scheduled check...")
 		configs, err := loadConfigs()
 		if err != nil {
 			log.Printf("Failed to load configs: %v", err)
 		} else if len(configs) == 0 {
 			log.Printf("No configurations found. Skipping check.")
 		} else {
-			// 批量保存标志
 			configChanged := false
 
 			for i := range configs {
+				// 检查 Release
 				if configs[i].MonitorRelease {
 					release, err := getLatestRelease(httpClient, configs[i].Repo)
 					if err != nil {
-						log.Printf("Error fetching GitHub release for %s: %v", configs[i].Repo, err)
+						log.Printf("Error fetching release for %s: %v", configs[i].Repo, err)
 					} else if release != nil {
 						if configs[i].LastReleaseID == nil || *configs[i].LastReleaseID != release.ID {
-							log.Printf("New release found for %s: %s", configs[i].Repo, release.Name)
+							// 首次不发送通知
 							if configs[i].LastReleaseID != nil {
-								name := release.Name
-								if name == "" {
-									name = release.TagName
-								}
-								name = escapeMarkdown(name)
-								messageText := fmt.Sprintf(
-									releaseMessageTmpl,
-									configs[i].Repo,
-									release.TagName,
-									release.HTMLURL,
-								)
+								msg := fmt.Sprintf(releaseMessageTmpl, configs[i].Repo, release.TagName, release.HTMLURL)
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID
 								}
-								if _, err := tg.sendMessage(targetID, messageText, telegramParseModeMarkdown, true, ""); err != nil {
-									log.Printf("Failed to send message to %d: %v", targetID, err)
-								}
+								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
 							}
-
 							latestID := release.ID
 							configs[i].LastReleaseID = &latestID
 							configChanged = true
@@ -193,55 +202,43 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 					}
 				}
 
+				// 检查 Commit
 				if configs[i].MonitorCommit {
 					branch := configs[i].Branch
 					if branch == "" {
-						branch = defaultBranch
+						defaultBr, err := getRepoDefaultBranch(httpClient, configs[i].Repo)
+						if err != nil {
+							branch = "main"
+						} else {
+							branch = defaultBr
+						}
+						// 缓存到配置，下次无需再请求 API
+						configs[i].Branch = branch
+						configChanged = true
 					}
+
 					commit, err := getLatestCommit(httpClient, configs[i].Repo, branch)
 					if err != nil {
-						log.Printf("Error fetching GitHub commit for %s (branch: %s): %v", configs[i].Repo, branch, err)
+						log.Printf("Error fetching commit for %s:%s: %v", configs[i].Repo, branch, err)
 					} else if commit != nil {
 						if configs[i].LastCommitSHA == nil || *configs[i].LastCommitSHA != commit.SHA {
+							// 首次不发送通知
 							if configs[i].LastCommitSHA != nil {
-								// 获取完整的 commit 消息
 								message := strings.TrimSpace(commit.Commit.Message)
 								if message == "" {
 									message = commit.SHA
 								}
-		
-							author := strings.TrimSpace(commit.Commit.Author.Name)
-							if author == "" && commit.Author != nil {
-								author = commit.Author.Login
-							}
-							if author == "" {
-								author = "未知作者"
-							}
-							author = escapeMarkdown(author)
-
-							// 提取仓库名（只要 repo 部分，不要 owner）
-							repoParts := strings.Split(configs[i].Repo, "/")
-							repoName := configs[i].Repo
-							if len(repoParts) == 2 {
-								repoName = repoParts[1]
-							}
-
-							messageText := fmt.Sprintf(
-								commitMessageTmpl,
-								repoName,
-								branch,
-								message,
-								commit.HTMLURL,
-							)
+								repoName := configs[i].Repo
+								if parts := strings.Split(configs[i].Repo, "/"); len(parts) == 2 {
+									repoName = parts[1]
+								}
+								msg := fmt.Sprintf(commitMessageTmpl, repoName, branch, message, commit.HTMLURL)
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID
 								}
-								if _, err := tg.sendMessage(targetID, messageText, telegramParseModeMarkdown, true, ""); err != nil {
-									log.Printf("Failed to send commit message to %d: %v", targetID, err)
-								}
+								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
 							}
-
 							latestSHA := commit.SHA
 							configs[i].LastCommitSHA = &latestSHA
 							configChanged = true
@@ -252,12 +249,9 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 				time.Sleep(repoCheckDelay)
 			}
 
-			// 批量保存：只在有变化时保存一次
 			if configChanged {
 				if err := saveConfigs(configs); err != nil {
 					log.Printf("Failed to save configs: %v", err)
-				} else {
-					log.Printf("Configurations updated and saved successfully")
 				}
 			}
 		}

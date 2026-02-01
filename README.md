@@ -1,6 +1,6 @@
-# GitHub Release & Commit Monitor
+# Newrelease
 
-一个轻量级的 Telegram 机器人，用于监控 GitHub 仓库的 Release 发布和 Commit 提交。
+轻量级 Telegram 机器人，监控 GitHub 仓库的 Release 和 Commit。
 
 ## 部署
 
@@ -56,7 +56,7 @@ go run cmd/bot/*.go
 
 ### 添加监控示例
 
-**基础用法** (监控 Release 和 Commit，默认 main 分支):
+**基础用法** (监控 Release 和 Commit，获取默认分支):
 ```bash
 /add kubernetes/kubernetes
 ```
