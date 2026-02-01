@@ -38,18 +38,14 @@ const (
 	unexpectedErrorMessage     = "❌ *操作失败*\n\n发生未知错误，请稍后重试"
 	setupSuccessMessageTmpl    = "✅ *添加成功*\n\n📦 *仓库*: `%s`\n📢 *通知*: %s\n🔍 *监控*: %s%s\n\n监控已启动，将在发现更新时通知你"
 	
-	// Release 通知模板 - 更醒目的样式
-	releaseMessageTmpl = "*新版本*\n\n" +
-		"📦 *%s*\n" +
+	// Release 通知
+	releaseMessageTmpl = "🎉 new release\n\n" +
+		"📦 %s\n" +
 		"└─ `%s`\n\n" +
-		"🏷️ *版本*: `%s`\n\n" +
 		"[查看详情](%s)"
 	
-	// Commit 通知模板 - 极简风格
-	commitMessageTmpl = "*新提交*\n\n" +
-		"📦 *%s*\n" +
-		"└─ `%s`\n" +
-		"└─ %s\n\n" +
+	// Commit 通知
+	commitMessageTmpl = "🔨 new commits to %s:%s:\n\n" +
 		"```\n%s\n```\n\n" +
 		"[查看详情](%s)"
 	

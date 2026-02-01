@@ -173,7 +173,6 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								name = escapeMarkdown(name)
 								messageText := fmt.Sprintf(
 									releaseMessageTmpl,
-									name,
 									configs[i].Repo,
 									release.TagName,
 									release.HTMLURL,
@@ -210,14 +209,6 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								if message == "" {
 									message = commit.SHA
 								}
-								
-								// 限制消息长度，避免过长
-								maxLen := 500
-								if len(message) > maxLen {
-									message = message[:maxLen] + "..."
-								}
-								// 代码块内不需要转义 Markdown
-
 		
 							author := strings.TrimSpace(commit.Commit.Author.Name)
 							if author == "" && commit.Author != nil {
@@ -239,7 +230,6 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								commitMessageTmpl,
 								repoName,
 								branch,
-								author,
 								message,
 								commit.HTMLURL,
 							)
