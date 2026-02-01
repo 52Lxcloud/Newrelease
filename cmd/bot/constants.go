@@ -39,13 +39,13 @@ const (
 	setupSuccessMessageTmpl    = "✅ *添加成功*\n\n📦 *仓库*: `%s`\n📢 *通知*: %s\n🔍 *监控*: %s%s\n\n监控已启动，将在发现更新时通知你"
 	
 	// Release 通知
-	releaseMessageTmpl = "🎉 new release\n\n" +
+	releaseMessageTmpl = "🎉 *new release*\n\n" +
 		"📦 %s\n" +
 		"└─ `%s`\n\n" +
 		"[查看详情](%s)"
 	
 	// Commit 通知
-	commitMessageTmpl = "🔨 new commits to %s:%s:\n\n" +
+	commitMessageTmpl = "🔨 *new commits to %s:%s*\n\n" +
 		"```\n%s\n```\n\n" +
 		"[查看详情](%s)"
 	
