@@ -1,6 +1,14 @@
 # Newrelease
 
-轻量级 Telegram 机器人，监控 GitHub 仓库的 Release 和 Commit。
+轻量级 Telegram 机器人，监控 GitHub 仓库的 Release 和 Commit，支持 AI 自动翻译提交信息。
+
+## 功能特性
+
+- **Release 监控**：实时推送新版本发布通知。
+- **Commit 监控**：监控指定分支的最新提交。
+- **AI 翻译**：自动调用 AI 翻译英文 Commit Message
+- **多渠道通知**：支持私聊或推送到频道/群组。
+- **权限控制**：仅允许指定管理员操作。
 
 ## 部署
 
@@ -8,7 +16,7 @@
 
 **方式 A: Docker Compose (推荐)**
 
-直接在 `docker-compose.yml` 中配置环境变量：
+创建 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -16,9 +24,16 @@ services:
     image: 52lxcloud/newrelease:latest
     restart: unless-stopped
     environment:
+      # 基础配置
       - TELEGRAM_BOT_TOKEN=your_token
       - ADMIN_ID=123456789
       - GITHUB_TOKEN=ghp_xxxx
+      
+      # AI 翻译配置 (可选)
+      # 如果不配置 API Key，将关闭翻译功能
+      - AI_API_KEY=sk-xxxx
+      - AI_BASE_URL=https://api.openai.com/v1  # 支持 DeepSeek, OpenAI 等兼容接口
+      - AI_MODEL=gpt-5.2                 # 模型名称，如 deepseek-chat
     volumes:
       - ./data:/data
 ```
@@ -36,6 +51,11 @@ docker-compose up -d
 TELEGRAM_BOT_TOKEN=your_token
 ADMIN_ID=123456789
 GITHUB_TOKEN=ghp_xxxx
+
+# AI 配置 (可选)
+AI_API_KEY=sk-xxxx
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
 ```
 
 然后运行：
@@ -51,8 +71,6 @@ go run cmd/bot/*.go
 - `/list` - 查看当前监控列表
 - `/delete <id>` - 删除监控 (ID 来自 `/list`)
 - `/help` - 显示帮助信息
-
-### 添加监控示例
 
 ### 添加监控示例
 
@@ -85,6 +103,10 @@ go run cmd/bot/*.go
 
 ## 说明
 
+- **AI 翻译**: 
+  - 自动识别是否为中文，若是则跳过翻译。
+  - 保留 `feat`, `fix` 等前缀不翻译，保持专业性。
+  - 支持所有兼容 OpenAI 格式的 API 接口（如 DeepSeek, Moonshot 等）。
 - **频率限制**: 未配置 GitHub Token 时每小时 60 次请求，配置后 5000 次。
 - **私有仓库**: 如果提供了带 `repo` 权限的 Token，支持监控私有仓库。
 - **数据存储**: 数据保存在 `data/` 目录下，重启容器数据不丢失。

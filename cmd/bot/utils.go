@@ -10,6 +10,31 @@ func escapeMarkdown(text string) string {
 	return markdownEscaper.Replace(text)
 }
 
+// MarkdownV2 转义器
+var markdownV2TextEscaper = strings.NewReplacer(
+	"_", "\\_",
+	"*", "\\*",
+	"[", "\\[",
+	"]", "\\]",
+	"(", "\\(",
+	")", "\\)",
+	"~", "\\~",
+	"`", "\\`",
+	"#", "\\#",
+	"+", "\\+",
+	"-", "\\-",
+	"=", "\\=",
+	"|", "\\|",
+	"{", "\\{",
+	"}", "\\}",
+	".", "\\.",
+	"!", "\\!",
+)
+
+func escapeMarkdownV2Text(text string) string {
+	return markdownV2TextEscaper.Replace(text)
+}
+
 // parseCommand 解析命令
 func parseCommand(text string) string {
 	if !strings.HasPrefix(text, "/") {

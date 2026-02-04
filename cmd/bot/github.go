@@ -228,11 +228,34 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								if message == "" {
 									message = commit.SHA
 								}
+
+								// AI 翻译
+								var translation string
+								if translated, err := translateText(message); err != nil {
+									log.Printf("AI translation failed: %v", err)
+								} else if translated != "" {
+									translation = translated
+								}
+
 								repoName := configs[i].Repo
 								if parts := strings.Split(configs[i].Repo, "/"); len(parts) == 2 {
 									repoName = parts[1]
 								}
-								msg := fmt.Sprintf(commitMessageTmpl, repoName, branch, message, commit.HTMLURL)
+								
+								// 构建消息
+								msg := fmt.Sprintf(commitMessageHeaderTmpl, repoName, branch, message)
+								if translation != "" {
+									// 转义
+									escapedTranslation := escapeMarkdownV2Text(translation)
+									lines := strings.Split(escapedTranslation, "\n")
+									for i := range lines {
+										lines[i] = ">" + lines[i]
+									}
+									quotedTranslation := strings.Join(lines, "\n")
+									msg += fmt.Sprintf("\n\n🇨🇳*译*:\n%s", quotedTranslation)
+								}
+								msg += fmt.Sprintf("\n\n%s", fmt.Sprintf(commitMessageLinkTmpl, commit.HTMLURL))
+
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID

@@ -28,6 +28,17 @@ func main() {
 		log.Printf("No GitHub Token - using unauthenticated API (60 requests/hour)")
 	}
 
+	// 读取 AI 配置（可选）
+	aiKey := os.Getenv("AI_API_KEY")
+	aiBase := os.Getenv("AI_BASE_URL")
+	aiModel := os.Getenv("AI_MODEL")
+	if aiKey != "" {
+		initAI(aiKey, aiBase, aiModel)
+		log.Printf("AI Translation enabled (Model: %s)", aiConfig.Model)
+	} else {
+		log.Printf("AI Translation disabled (AI_API_KEY not set)")
+	}
+
 	tg := newTelegramClient(token)
 	me, err := tg.getMe()
 	if err != nil {

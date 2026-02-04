@@ -6,5 +6,8 @@ services:
       - TELEGRAM_BOT_TOKEN=机器人token
       - ADMIN_ID=管理员ID
       - GITHUB_TOKEN=githubtoken
+      - AI_API_KEY=sk-xxxx
+      - AI_BASE_URL=https://api.openai.com/v1
+      - AI_MODEL=gpt-5.2
     volumes:
       - ./data:/data

@@ -17,12 +17,26 @@ const (
 // 正则表达式
 var repoRegexp = regexp.MustCompile(`^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$`)
 
-// Markdown 转义器 - Telegram Markdown 模式只需转义这几个字符
+// MarkdownV2 转义器
 var markdownEscaper = strings.NewReplacer(
-	"_", "\\_",  // 斜体标记
-	"*", "\\*",  // 粗体标记
-	"`", "\\`",  // 代码标记
-	"[", "\\[",  // 链接标记
+	"_", "\\_",
+	"*", "\\*",
+	"[", "\\[",
+	"]", "\\]",
+	"(", "\\(",
+	")", "\\)",
+	"~", "\\~",
+	"`", "\\`",
+	">", "\\>",
+	"#", "\\#",
+	"+", "\\+",
+	"-", "\\-",
+	"=", "\\=",
+	"|", "\\|",
+	"{", "\\{",
+	"}", "\\}",
+	".", "\\.",
+	"!", "\\!",
 )
 
 // 消息模板
@@ -44,9 +58,10 @@ const (
 		"[查看详情](%s)"
 	
 	// Commit 通知
-	commitMessageTmpl = "🔨 *new commits to %s:%s*\n\n" +
-		"```\n%s\n```\n\n" +
-		"[查看详情](%s)"
+	// Commit 通知
+	commitMessageHeaderTmpl = "🔨 *new commits to %s:%s*\n\n" +
+		"```\n%s\n```"
+	commitMessageLinkTmpl = "[查看详情](%s)"
 	
-	telegramParseModeMarkdown = "Markdown"
+	telegramParseModeMarkdown = "MarkdownV2"
 )
