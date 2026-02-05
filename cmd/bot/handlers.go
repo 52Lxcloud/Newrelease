@@ -15,6 +15,9 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 	}
 
 	cmd := parseCommand(text)
+	if cmd != "" {
+		log.Printf("🔧 Executing command: %s", cmd)
+	}
 	switch cmd {
 	case "/start", "/help":
 		handleStart(tg, msg.Chat.ID)
@@ -25,33 +28,15 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 	case "/delete", "/del", "/remove":
 		handleDelete(tg, msg.Chat.ID, text)
 	default:
-		// 未知命令，不回复
+		if cmd != "" {
+			log.Printf("⚠️  Unknown command: %s", cmd)
+		}
 	}
 }
 
 // handleStart 处理 /start 命令
 func handleStart(tg *telegramClient, chatID int64) {
-	helpText := "*GitHub Release & Commit 监控机器人*\n\n" +
-		"*可用命令：*\n\n" +
-		"• `/list` - 查看所有监控的仓库\n\n" +
-		"• `/add` - 添加仓库监控\n" +
-		"  格式：`/add owner/repo[:branch] [选项]`\n  \n" +
-		"  选项：\n" +
-		"  `-r` : 监控 Release\n" +
-		"  `-c` : 监控 Commit\n" +
-		"  `@channel` : 发送到指定频道（默认私聊）\n  \n" +
-		"  示例：\n" +
-		"  `/add nginx/nginx:master -r`\n" +
-		"  `/add golang/go:dev -c`\n" +
-		"  `/add facebook/react`\n\n" +
-		"• `/delete <序号>` - 删除监控\n" +
-		"  示例：`/delete 1`\n\n" +
-		"*提示：*\n" +
-		"• 默认监控 Release 和 Commit\n" +
-		"• 用 `:branch` 快速指定其他分支\n" +
-		"• 频道需先添加机器人为管理员"
-
-	tg.sendMessage(chatID, helpText, telegramParseModeMarkdown, false, "")
+	tg.sendMessage(chatID, Messages.Help(), telegramParseModeMarkdown, false, "")
 }
 
 // handleList 处理 /list 命令
@@ -59,7 +44,7 @@ func handleList(tg *telegramClient, chatID int64) {
 	msg, err := buildRepoListMessage()
 	if err != nil {
 		log.Printf("Failed to build repo list: %v", err)
-		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
 		return
 	}
 	tg.sendMessage(chatID, msg, telegramParseModeMarkdown, false, "")
@@ -70,7 +55,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	// 解析命令参数
 	args := strings.Fields(text)
 	if len(args) < 2 {
-		tg.sendMessage(chatID, "❌ 格式错误！\n\n使用方法：`/add owner/repo [选项]`\n\n发送 `/start` 查看详细帮助。", telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorFormat(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -85,7 +70,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	}
 
 	if !repoRegexp.MatchString(repo) {
-		tg.sendMessage(chatID, invalidRepoMessage, telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorInvalidRepo(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -130,14 +115,14 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		chat, err := tg.getChat(channelUsername)
 		if err != nil {
 			log.Printf("Failed to get chat %s: %v", channelUsername, err)
-			tg.sendMessage(chatID, channelNotFoundMessage, telegramParseModeMarkdown, false, "")
+			tg.sendMessage(chatID, Messages.ErrorChannelNotFound(), telegramParseModeMarkdown, false, "")
 			return
 		}
 		
 		// 检查机器人是否为管理员
 		admins, err := tg.getChatAdministrators(chat.ID)
 		if err != nil {
-			tg.sendMessage(chatID, botNotAdminMessage, telegramParseModeMarkdown, false, "")
+			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "")
 			return
 		}
 		
@@ -150,7 +135,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		}
 		
 		if !isAdmin {
-			tg.sendMessage(chatID, botNotAdminMessage, telegramParseModeMarkdown, false, "")
+			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "")
 			return
 		}
 		
@@ -164,7 +149,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	configs, err := loadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
-		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -180,7 +165,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 
 	// 检查重复
 	if isDuplicateConfig(configs, newConfig) {
-		tg.sendMessage(chatID, repoExistsMessage, telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorRepoExists(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -188,7 +173,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	configs = append(configs, newConfig)
 	if err := saveConfigs(configs); err != nil {
 		log.Printf("Failed to save configs: %v", err)
-		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -200,7 +185,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 
 	monitorTypeStr := ""
 	if monitorRelease && monitorCommit {
-		monitorTypeStr = "Release + Commit"
+		monitorTypeStr = "Release \\+ Commit"
 	} else if monitorRelease {
 		monitorTypeStr = "Release"
 	} else if monitorCommit {
@@ -209,12 +194,12 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 
 	branchInfo := ""
 	if monitorCommit {
-		branchInfo = fmt.Sprintf("\n🔀 *分支*: `%s`", branch)
+		branchInfo = branch
 	}
 
-	successMsg := fmt.Sprintf(setupSuccessMessageTmpl,
-		escapeMarkdown(repo),
-		escapeMarkdown(notifyWay),
+	successMsg := Messages.SuccessAdded(
+		MDV2.Escape(repo),
+		MDV2.Escape(notifyWay),
 		monitorTypeStr,
 		branchInfo,
 	)
@@ -228,7 +213,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 func handleDelete(tg *telegramClient, chatID int64, text string) {
 	args := strings.Fields(text)
 	if len(args) < 2 {
-		tg.sendMessage(chatID, "❌ 格式错误！\n\n使用方法：`/delete <序号>`\n\n先用 `/list` 查看序号。", telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorDeleteFormat(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -241,7 +226,7 @@ func handleDelete(tg *telegramClient, chatID int64, text string) {
 	configs, err := loadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
-		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
@@ -256,11 +241,11 @@ func handleDelete(tg *telegramClient, chatID int64, text string) {
 
 	if err := saveConfigs(configs); err != nil {
 		log.Printf("Failed to save configs: %v", err)
-		tg.sendMessage(chatID, unexpectedErrorMessage, "", false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
 		return
 	}
 
-	successMsg := fmt.Sprintf(deleteSuccessMessageTmpl, escapeMarkdown(deletedRepo))
+	successMsg := Messages.SuccessDeleted(MDV2.Escape(deletedRepo))
 	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
 	log.Printf("Deleted repo: %s", deletedRepo)
 }

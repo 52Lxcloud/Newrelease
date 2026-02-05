@@ -1,39 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 )
-
-// escapeMarkdown 转义 Markdown 特殊字符
-func escapeMarkdown(text string) string {
-	return markdownEscaper.Replace(text)
-}
-
-// MarkdownV2 转义器
-var markdownV2TextEscaper = strings.NewReplacer(
-	"_", "\\_",
-	"*", "\\*",
-	"[", "\\[",
-	"]", "\\]",
-	"(", "\\(",
-	")", "\\)",
-	"~", "\\~",
-	"`", "\\`",
-	"#", "\\#",
-	"+", "\\+",
-	"-", "\\-",
-	"=", "\\=",
-	"|", "\\|",
-	"{", "\\{",
-	"}", "\\}",
-	".", "\\.",
-	"!", "\\!",
-)
-
-func escapeMarkdownV2Text(text string) string {
-	return markdownV2TextEscaper.Replace(text)
-}
 
 // parseCommand 解析命令
 func parseCommand(text string) string {
@@ -58,46 +27,45 @@ func buildRepoListMessage() (string, error) {
 		return "", err
 	}
 	if len(configs) == 0 {
-		return listEmptyMessage, nil
+		return Messages.ListEmpty(), nil
 	}
 
 	var builder strings.Builder
-	builder.WriteString(listHeaderMessage)
+	builder.WriteString(Messages.ListHeader())
 	builder.WriteString("\n\n")
+	
 	for i, cfg := range configs {
-		repo := escapeMarkdown(cfg.Repo)
-		
-		// 分支信息
+		// 分支信息（非 main 分支才显示）
 		branchInfo := ""
 		if cfg.MonitorCommit && cfg.Branch != "" && cfg.Branch != "main" {
-			branchInfo = fmt.Sprintf(":%s", cfg.Branch)
+			branchInfo = cfg.Branch
 		}
-		
+
 		// 通知目标
 		target := "私聊"
 		if cfg.ChannelID != 0 {
 			channelTitle := strings.TrimSpace(cfg.ChannelTitle)
 			if channelTitle != "" {
-				target = escapeMarkdown(channelTitle)
+				target = MDV2.Escape(channelTitle)
 			} else {
-				target = fmt.Sprintf("频道 %d", cfg.ChannelID)
+				target = "频道"
 			}
 		}
 
 		// 监控类型
 		var monitorType string
 		if cfg.MonitorRelease && cfg.MonitorCommit {
-			monitorType = "Release + Commit"
+			monitorType = "Release \\+ Commit"
 		} else if cfg.MonitorRelease {
 			monitorType = "Release"
 		} else if cfg.MonitorCommit {
 			monitorType = "Commit"
 		}
 
-		// 多行格式
-		builder.WriteString(fmt.Sprintf("*%d.* `%s%s`\n", i+1, repo, branchInfo))
-		builder.WriteString(fmt.Sprintf("└─ 监控: %s\n", monitorType))
-		builder.WriteString(fmt.Sprintf("└─ 通知: %s\n\n", target))
+		// 构建列表项
+		builder.WriteString(Messages.ListItem(i+1, MDV2.Escape(cfg.Repo), branchInfo, monitorType, target))
+		builder.WriteString("\n\n")
 	}
+	
 	return strings.TrimSpace(builder.String()), nil
 }

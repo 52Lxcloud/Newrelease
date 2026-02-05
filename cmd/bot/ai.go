@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -78,8 +79,11 @@ func translateText(text string) (string, error) {
 
 	// 中文不翻译
 	if isChinese(text) {
+		log.Printf("🇨🇳 Text is already Chinese, skipping translation")
 		return "", nil
 	}
+
+	log.Printf("🤖 Requesting AI translation for: %q", text)
 
 	reqBody := chatCompletionRequest{
 		Model: aiConfig.Model,
@@ -113,23 +117,29 @@ func translateText(text string) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ AI translation request failed: %v", err)
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ AI API returned status %d: %s", resp.StatusCode, string(body))
 		return "", fmt.Errorf("status: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var aiResp chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&aiResp); err != nil {
+		log.Printf("❌ Failed to decode AI response: %v", err)
 		return "", err
 	}
 
 	if len(aiResp.Choices) == 0 {
+		log.Printf("❌ AI returned empty choices")
 		return "", fmt.Errorf("empty choices from ai")
 	}
 
-	return aiResp.Choices[0].Message.Content, nil
+	translated := aiResp.Choices[0].Message.Content
+	log.Printf("✅ AI translation complete: %q", translated)
+	return translated, nil
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -17,51 +16,7 @@ const (
 // 正则表达式
 var repoRegexp = regexp.MustCompile(`^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$`)
 
-// MarkdownV2 转义器
-var markdownEscaper = strings.NewReplacer(
-	"_", "\\_",
-	"*", "\\*",
-	"[", "\\[",
-	"]", "\\]",
-	"(", "\\(",
-	")", "\\)",
-	"~", "\\~",
-	"`", "\\`",
-	">", "\\>",
-	"#", "\\#",
-	"+", "\\+",
-	"-", "\\-",
-	"=", "\\=",
-	"|", "\\|",
-	"{", "\\{",
-	"}", "\\}",
-	".", "\\.",
-	"!", "\\!",
-)
-
-// 消息模板
+// Telegram 解析模式
 const (
-	listEmptyMessage           = "📭 当前没有已添加的仓库。\n\n使用 `/add owner/repo` 添加监控"
-	listHeaderMessage          = "📚 *已监控的仓库*"
-	invalidRepoMessage         = "❌ *格式错误*\n\n请使用 `owner/repository` 格式\n例如：`aiogram/aiogram`"
-	repoExistsMessage          = "⚠️ *该仓库已存在相同配置*\n无需重复添加"
-	deleteSuccessMessageTmpl   = "🗑️ *删除成功*\n\n已停止监控 `%s`"
-	channelNotFoundMessage     = "❌ *频道不存在*\n\n请检查用户名，并确保已添加机器人为管理员"
-	botNotAdminMessage         = "⚠️ *权限不足*\n\n请将机器人添加为频道管理员\n并授予 \"发布消息\" 权限"
-	unexpectedErrorMessage     = "❌ *操作失败*\n\n发生未知错误，请稍后重试"
-	setupSuccessMessageTmpl    = "*添加成功*\n\n📦 *仓库*: `%s`\n📢 *通知*: %s\n🔍 *监控*: %s%s\n\n监控已启动，将在发现更新时通知你"
-	
-	// Release 通知
-	releaseMessageTmpl = "🎉 *new release*\n\n" +
-		"📦 %s\n" +
-		"└─ `%s`\n\n" +
-		"[查看详情](%s)"
-	
-	// Commit 通知
-	// Commit 通知
-	commitMessageHeaderTmpl = "🔨 *new commits to %s:%s*\n\n" +
-		"```\n%s\n```"
-	commitMessageLinkTmpl = "[查看详情](%s)"
-	
 	telegramParseModeMarkdown = "MarkdownV2"
 )

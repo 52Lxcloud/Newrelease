@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -129,6 +130,7 @@ func (c *telegramClient) getUpdates(offset int) ([]update, error) {
 
 // sendMessage 发送消息
 func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disablePreview bool, replyMarkup string) (*message, error) {
+	log.Printf("💬 Sending Telegram message to %d (length: %d chars)", chatID, len(text))
 	params := url.Values{}
 	params.Set("chat_id", strconv.FormatInt(chatID, 10))
 	params.Set("text", text)
@@ -143,8 +145,10 @@ func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disab
 	}
 	var msg message
 	if err := c.call("sendMessage", params, &msg); err != nil {
+		log.Printf("❌ Telegram sendMessage failed: %v", err)
 		return nil, err
 	}
+	log.Printf("✅ Message sent successfully (message_id: %d)", msg.MessageID)
 	return &msg, nil
 }
 

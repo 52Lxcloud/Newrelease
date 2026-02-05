@@ -74,6 +74,7 @@ func checkRateLimit(resp *http.Response) {
 // getLatestRelease 获取最新 Release
 func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	log.Printf("🐙 GitHub API: GET %s", endpoint)
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -82,6 +83,7 @@ func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) 
 
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ GitHub API error for %s: %v", repo, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -89,22 +91,27 @@ func getLatestRelease(client *http.Client, repo string) (*gitHubRelease, error) 
 	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
+		log.Printf("🔍 No releases found for %s", repo)
 		return nil, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("❌ GitHub API returned status %d for %s", resp.StatusCode, repo)
 		return nil, fmt.Errorf("unexpected status %d from GitHub", resp.StatusCode)
 	}
 
 	var release gitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		log.Printf("❌ Failed to decode release response for %s: %v", repo, err)
 		return nil, err
 	}
+	log.Printf("✔️ Found release for %s: %s (ID: %d)", repo, release.TagName, release.ID)
 	return &release, nil
 }
 
 // getLatestCommit 获取最新 Commit
 func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=1", repo, url.QueryEscape(branch))
+	log.Printf("🐙 GitHub API: GET %s", endpoint)
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -113,6 +120,7 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ GitHub API error for %s:%s: %v", repo, branch, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -120,25 +128,31 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 	checkRateLimit(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
+		log.Printf("🔍 No commits found for %s:%s", repo, branch)
 		return nil, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("❌ GitHub API returned status %d for %s:%s", resp.StatusCode, repo, branch)
 		return nil, fmt.Errorf("unexpected status %d from GitHub", resp.StatusCode)
 	}
 
 	var commits []gitCommit
 	if err := json.NewDecoder(resp.Body).Decode(&commits); err != nil {
+		log.Printf("❌ Failed to decode commit response for %s:%s: %v", repo, branch, err)
 		return nil, err
 	}
 	if len(commits) == 0 {
+		log.Printf("🔍 Empty commits array for %s:%s", repo, branch)
 		return nil, nil
 	}
+	log.Printf("✔️ Found commit for %s:%s: %.7s", repo, branch, commits[0].SHA)
 	return &commits[0], nil
 }
 
 // getRepoDefaultBranch 获取仓库的默认分支
 func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+	log.Printf("🐙 GitHub API: GET %s (fetching default branch)", endpoint)
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return "", err
@@ -147,6 +161,7 @@ func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("❌ Failed to get repo info for %s: %v", repo, err)
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -154,13 +169,16 @@ func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
 	checkRateLimit(resp)
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("❌ GitHub API returned status %d for repo %s", resp.StatusCode, repo)
 		return "", fmt.Errorf("failed to get repo info: status %d", resp.StatusCode)
 	}
 
 	var repoInfo gitHubRepo
 	if err := json.NewDecoder(resp.Body).Decode(&repoInfo); err != nil {
+		log.Printf("❌ Failed to decode repo info for %s: %v", repo, err)
 		return "", err
 	}
+	log.Printf("✔️ Default branch for %s: %s", repo, repoInfo.DefaultBranch)
 	return repoInfo.DefaultBranch, nil
 }
 
@@ -179,26 +197,37 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 			configChanged := false
 
 			for i := range configs {
+				log.Printf("📦 [%d/%d] Checking %s...", i+1, len(configs), configs[i].Repo)
+				
 				// 检查 Release
 				if configs[i].MonitorRelease {
+					log.Printf("  🔍 Checking releases for %s", configs[i].Repo)
 					release, err := getLatestRelease(httpClient, configs[i].Repo)
 					if err != nil {
-						log.Printf("Error fetching release for %s: %v", configs[i].Repo, err)
+						log.Printf("  ❌ Error fetching release for %s: %v", configs[i].Repo, err)
 					} else if release != nil {
 						if configs[i].LastReleaseID == nil || *configs[i].LastReleaseID != release.ID {
 							// 首次不发送通知
 							if configs[i].LastReleaseID != nil {
-								msg := fmt.Sprintf(releaseMessageTmpl, configs[i].Repo, release.TagName, release.HTMLURL)
+								log.Printf("  🆕 New release detected for %s: %s (ID: %d -> %d)", configs[i].Repo, release.TagName, *configs[i].LastReleaseID, release.ID)
+								msg := Messages.NotifyRelease(configs[i].Repo, release.TagName, release.HTMLURL)
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID
 								}
+								log.Printf("  📤 Sending release notification to %d", targetID)
 								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
+							} else {
+								log.Printf("  ℹ️ Initial release recorded for %s: %s (ID: %d) - no notification sent", configs[i].Repo, release.TagName, release.ID)
 							}
 							latestID := release.ID
 							configs[i].LastReleaseID = &latestID
 							configChanged = true
+						} else {
+							log.Printf("  ✓ No new release for %s (current: %d)", configs[i].Repo, release.ID)
 						}
+					} else {
+						log.Printf("  ℹ️ No releases found for %s", configs[i].Repo)
 					}
 				}
 
@@ -206,8 +235,10 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 				if configs[i].MonitorCommit {
 					branch := configs[i].Branch
 					if branch == "" {
+						log.Printf("  🔍 Fetching default branch for %s", configs[i].Repo)
 						defaultBr, err := getRepoDefaultBranch(httpClient, configs[i].Repo)
 						if err != nil {
+							log.Printf("  ⚠️ Failed to get default branch for %s, using 'main': %v", configs[i].Repo, err)
 							branch = "main"
 						} else {
 							branch = defaultBr
@@ -217,13 +248,19 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 						configChanged = true
 					}
 
+					log.Printf("  🔍 Checking commits for %s:%s", configs[i].Repo, branch)
 					commit, err := getLatestCommit(httpClient, configs[i].Repo, branch)
 					if err != nil {
-						log.Printf("Error fetching commit for %s:%s: %v", configs[i].Repo, branch, err)
+						log.Printf("  ❌ Error fetching commit for %s:%s: %v", configs[i].Repo, branch, err)
 					} else if commit != nil {
 						if configs[i].LastCommitSHA == nil || *configs[i].LastCommitSHA != commit.SHA {
 							// 首次不发送通知
 							if configs[i].LastCommitSHA != nil {
+								oldSHA := "none"
+								if configs[i].LastCommitSHA != nil {
+									oldSHA = (*configs[i].LastCommitSHA)[:7]
+								}
+								log.Printf("  🆕 New commit detected for %s:%s: %.7s -> %.7s", configs[i].Repo, branch, oldSHA, commit.SHA)
 								message := strings.TrimSpace(commit.Commit.Message)
 								if message == "" {
 									message = commit.SHA
@@ -232,7 +269,7 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								// AI 翻译
 								var translation string
 								if translated, err := translateText(message); err != nil {
-									log.Printf("AI translation failed: %v", err)
+									log.Printf("  ⚠️ AI translation failed: %v", err)
 								} else if translated != "" {
 									translation = translated
 								}
@@ -242,40 +279,40 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 									repoName = parts[1]
 								}
 								
-								// 构建消息
-								msg := fmt.Sprintf(commitMessageHeaderTmpl, repoName, branch, message)
-								if translation != "" {
-									// 转义
-									escapedTranslation := escapeMarkdownV2Text(translation)
-									lines := strings.Split(escapedTranslation, "\n")
-									for i := range lines {
-										lines[i] = ">" + lines[i]
-									}
-									quotedTranslation := strings.Join(lines, "\n")
-									msg += fmt.Sprintf("\n\n🇨🇳*译*:\n%s", quotedTranslation)
-								}
-								msg += fmt.Sprintf("\n\n%s", fmt.Sprintf(commitMessageLinkTmpl, commit.HTMLURL))
+								// 使用 Messages 构建消息
+								msg := Messages.NotifyCommit(repoName, branch, message, translation, commit.HTMLURL)
 
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID
 								}
+								log.Printf("  📤 Sending commit notification to %d", targetID)
 								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
+							} else {
+								log.Printf("  ℹ️ Initial commit recorded for %s:%s: %.7s - no notification sent", configs[i].Repo, branch, commit.SHA)
 							}
 							latestSHA := commit.SHA
 							configs[i].LastCommitSHA = &latestSHA
 							configChanged = true
+						} else {
+							log.Printf("  ✓ No new commit for %s:%s (current: %.7s)", configs[i].Repo, branch, commit.SHA)
 						}
+					} else {
+						log.Printf("  ℹ️ No commits found for %s:%s", configs[i].Repo, branch)
 					}
 				}
 
 				time.Sleep(repoCheckDelay)
 			}
 
+			log.Printf("🎯 Check cycle complete for %d repositories", len(configs))
 			if configChanged {
+				log.Printf("🔄 Configuration changed, saving updates...")
 				if err := saveConfigs(configs); err != nil {
-					log.Printf("Failed to save configs: %v", err)
+					log.Printf("❌ Failed to save configs: %v", err)
 				}
+			} else {
+				log.Printf("ℹ️ No configuration changes to save")
 			}
 		}
 

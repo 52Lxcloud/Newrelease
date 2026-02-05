@@ -75,6 +75,7 @@ func main() {
 				continue
 			}
 
+			log.Printf("📩 Received message from admin %d: %q", fromID, upd.Message.Text)
 			handleMessage(tg, upd.Message, adminID)
 		}
 	}

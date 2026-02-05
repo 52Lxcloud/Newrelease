@@ -31,25 +31,30 @@ func loadConfigs() ([]repoConfig, error) {
 
 	_, err := os.Stat(configFile)
 	if errors.Is(err, os.ErrNotExist) {
+		log.Printf("📂 Config file not found, starting with empty config")
 		return []repoConfig{}, nil
 	}
 	if err != nil {
+		log.Printf("❌ Failed to stat config file: %v", err)
 		return nil, err
 	}
 
 	data, err := os.ReadFile(configFile)
 	if err != nil {
+		log.Printf("❌ Failed to read config file: %v", err)
 		return nil, err
 	}
 	if len(data) == 0 {
+		log.Printf("📂 Config file is empty")
 		return []repoConfig{}, nil
 	}
 
 	var configs []repoConfig
 	if err := json.Unmarshal(data, &configs); err != nil {
-		log.Printf("ERROR: Failed to parse config file: %v", err)
+		log.Printf("❌ Failed to parse config file: %v", err)
 		return nil, fmt.Errorf("corrupt config file, please check %s: %w", configFile, err)
 	}
+	log.Printf("✅ Loaded %d repository configuration(s)", len(configs))
 	return configs, nil
 }
 
@@ -59,11 +64,18 @@ func saveConfigs(configs []repoConfig) error {
 	defer configMu.Unlock()
 
 	if err := os.MkdirAll(filepath.Dir(configFile), 0o755); err != nil {
+		log.Printf("❌ Failed to create config directory: %v", err)
 		return err
 	}
 	data, err := json.MarshalIndent(configs, "", "    ")
 	if err != nil {
+		log.Printf("❌ Failed to marshal config: %v", err)
 		return err
 	}
-	return os.WriteFile(configFile, data, 0o644)
+	if err := os.WriteFile(configFile, data, 0o644); err != nil {
+		log.Printf("❌ Failed to write config file: %v", err)
+		return err
+	}
+	log.Printf("💾 Saved %d repository configuration(s)", len(configs))
+	return nil
 }
