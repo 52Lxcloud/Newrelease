@@ -79,11 +79,11 @@ func translateText(text string) (string, error) {
 
 	// 中文不翻译
 	if isChinese(text) {
-		log.Printf("🇨🇳 Text is already Chinese, skipping translation")
+		Logger.Debug("🇨🇳 Text is Chinese, skipping translation")
 		return "", nil
 	}
 
-	log.Printf("🤖 Requesting AI translation for: %q", text)
+	Logger.Debug("🤖 AI translating: %.50s...", text)
 
 	reqBody := chatCompletionRequest{
 		Model: aiConfig.Model,
@@ -140,6 +140,6 @@ func translateText(text string) (string, error) {
 	}
 
 	translated := aiResp.Choices[0].Message.Content
-	log.Printf("✅ AI translation complete: %q", translated)
+	Logger.Debug("✅ AI translation done")
 	return translated, nil
 }

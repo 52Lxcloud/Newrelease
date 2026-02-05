@@ -31,7 +31,7 @@ func loadConfigs() ([]repoConfig, error) {
 
 	_, err := os.Stat(configFile)
 	if errors.Is(err, os.ErrNotExist) {
-		log.Printf("📂 Config file not found, starting with empty config")
+		Logger.Debug("📂 Config file not found, starting with empty config")
 		return []repoConfig{}, nil
 	}
 	if err != nil {
@@ -45,7 +45,7 @@ func loadConfigs() ([]repoConfig, error) {
 		return nil, err
 	}
 	if len(data) == 0 {
-		log.Printf("📂 Config file is empty")
+		Logger.Debug("📂 Config file is empty")
 		return []repoConfig{}, nil
 	}
 
@@ -54,7 +54,7 @@ func loadConfigs() ([]repoConfig, error) {
 		log.Printf("❌ Failed to parse config file: %v", err)
 		return nil, fmt.Errorf("corrupt config file, please check %s: %w", configFile, err)
 	}
-	log.Printf("✅ Loaded %d repository configuration(s)", len(configs))
+	Logger.Debug("✅ Loaded %d config(s)", len(configs))
 	return configs, nil
 }
 
@@ -76,6 +76,6 @@ func saveConfigs(configs []repoConfig) error {
 		log.Printf("❌ Failed to write config file: %v", err)
 		return err
 	}
-	log.Printf("💾 Saved %d repository configuration(s)", len(configs))
+	Logger.Debug("💾 Saved %d config(s)", len(configs))
 	return nil
 }

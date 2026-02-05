@@ -23,9 +23,7 @@ func main() {
 	// 读取 GitHub Token（可选）
 	githubToken = strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
 	if githubToken != "" {
-		log.Printf("GitHub Token configured - API rate limit increased to 5000/hour")
-	} else {
-		log.Printf("No GitHub Token - using unauthenticated API (60 requests/hour)")
+		Logger.Debug("GitHub Token configured")
 	}
 
 	// 读取 AI 配置（可选）
@@ -34,9 +32,7 @@ func main() {
 	aiModel := os.Getenv("AI_MODEL")
 	if aiKey != "" {
 		initAI(aiKey, aiBase, aiModel)
-		log.Printf("AI Translation enabled (Model: %s)", aiConfig.Model)
-	} else {
-		log.Printf("AI Translation disabled (AI_API_KEY not set)")
+		Logger.Debug("AI Translation enabled (Model: %s)", aiConfig.Model)
 	}
 
 	tg := newTelegramClient(token)
@@ -75,7 +71,7 @@ func main() {
 				continue
 			}
 
-			log.Printf("📩 Received message from admin %d: %q", fromID, upd.Message.Text)
+			Logger.Debug("📩 Received: %q", upd.Message.Text)
 			handleMessage(tg, upd.Message, adminID)
 		}
 	}

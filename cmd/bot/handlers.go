@@ -16,7 +16,7 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 
 	cmd := parseCommand(text)
 	if cmd != "" {
-		log.Printf("🔧 Executing command: %s", cmd)
+		Logger.Debug("🔧 Command: %s", cmd)
 	}
 	switch cmd {
 	case "/start", "/help":
@@ -29,7 +29,7 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 		handleDelete(tg, msg.Chat.ID, text)
 	default:
 		if cmd != "" {
-			log.Printf("⚠️  Unknown command: %s", cmd)
+			Logger.Debug("⚠️ Unknown command: %s", cmd)
 		}
 	}
 }
@@ -205,8 +205,7 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	)
 
 	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
-	log.Printf("Added repo: %s (Release: %v, Commit: %v, Branch: %s, Channel: %s)",
-		repo, monitorRelease, monitorCommit, branch, notifyWay)
+	log.Printf("➕ Added: %s", repo)
 }
 
 // handleDelete 处理 /delete 命令
@@ -247,7 +246,7 @@ func handleDelete(tg *telegramClient, chatID int64, text string) {
 
 	successMsg := Messages.SuccessDeleted(MDV2.Escape(deletedRepo))
 	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
-	log.Printf("Deleted repo: %s", deletedRepo)
+	log.Printf("🗑️ Deleted: %s", deletedRepo)
 }
 
 // isDuplicateConfig 检查是否存在重复配置
