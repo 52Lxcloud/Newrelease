@@ -16,6 +16,7 @@ type gitHubRelease struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
 	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
 	HTMLURL string `json:"html_url"`
 }
 
@@ -210,7 +211,19 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 							// 首次不发送通知
 							if configs[i].LastReleaseID != nil {
 								log.Printf("🆕 New release: %s@%s", configs[i].Repo, release.TagName)
-								msg := Messages.NotifyRelease(configs[i].Repo, release.TagName, release.HTMLURL)
+
+								// AI 翻译更新日志（如果有且非中文）
+								var releaseBody, releaseTranslation string
+								if body := strings.TrimSpace(release.Body); body != "" {
+									releaseBody = body
+									if translated, err := translateText(body); err != nil {
+										Logger.Debug("  ⚠️ AI translation failed for release body: %v", err)
+									} else if translated != "" {
+										releaseTranslation = translated
+									}
+								}
+
+								msg := Messages.NotifyRelease(configs[i].Repo, release.TagName, releaseBody, releaseTranslation, release.HTMLURL)
 								targetID := configs[i].ChannelID
 								if targetID == 0 {
 									targetID = adminID

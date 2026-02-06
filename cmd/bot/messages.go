@@ -30,7 +30,7 @@ var Messages = struct {
 	ListItem   func(index int, repo, branchInfo, monitorType, target string) string
 
 	// 通知
-	NotifyRelease func(repo, tag, url string) string
+	NotifyRelease func(repo, tag, body, translation, url string) string
 	NotifyCommit  func(repoName, branch, message, translation, url string) string
 }{
 	// ============================================
@@ -194,15 +194,33 @@ var Messages = struct {
 	// ============================================
 	// 通知消息
 	// ============================================
-	NotifyRelease: func(repo, tag, url string) string {
-		return MDV2.JoinLines(
+	NotifyRelease: func(repo, tag, body, translation, url string) string {
+		var lines []string
+
+		// 标题
+		lines = append(lines,
 			MDV2.Nbsp("🎉", MDV2.Bold("new release")),
 			"",
 			"📦 "+MDV2.Escape(repo),
 			"└─ "+MDV2.CodeRaw(tag),
+		)
+
+		// 翻译
+		if translation != "" {
+			lines = append(lines,
+				"",
+				MDV2.Bold("更新日志") + ":",
+				MDV2.BlockquoteEscaped(translation),
+			)
+		}
+
+		// 链接
+		lines = append(lines,
 			"",
 			MDV2.LinkRaw("查看详情", url),
 		)
+
+		return MDV2.JoinLines(lines...)
 	},
 
 	NotifyCommit: func(repoName, branch, message, translation, url string) string {
@@ -219,7 +237,7 @@ var Messages = struct {
 		if translation != "" {
 			lines = append(lines,
 				"",
-				MDV2.Nbsp("🇨🇳", MDV2.Bold("译") + ":"),
+				MDV2.Bold("译") + ":",
 				MDV2.BlockquoteEscaped(translation),
 			)
 		}
