@@ -45,6 +45,7 @@ type chat struct {
 	Title    string `json:"title"`
 	Username string `json:"username"`
 	Type     string `json:"type"`
+	IsForum  bool   `json:"is_forum"` // 是否开启话题功能
 }
 
 type chatMember struct {
@@ -129,8 +130,9 @@ func (c *telegramClient) getUpdates(offset int) ([]update, error) {
 }
 
 // sendMessage 发送消息
-func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disablePreview bool, replyMarkup string) (*message, error) {
-	Logger.Debug("💬 Sending message to %d (%d chars)", chatID, len(text))
+// threadID: 群组话题 ID，为 0 时不指定话题
+func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disablePreview bool, replyMarkup string, threadID int64) (*message, error) {
+	Logger.Debug("💬 Sending message to %d (topic: %d, %d chars)", chatID, threadID, len(text))
 	params := url.Values{}
 	params.Set("chat_id", strconv.FormatInt(chatID, 10))
 	params.Set("text", text)
@@ -142,6 +144,9 @@ func (c *telegramClient) sendMessage(chatID int64, text, parseMode string, disab
 	}
 	if replyMarkup != "" {
 		params.Set("reply_markup", replyMarkup)
+	}
+	if threadID > 0 {
+		params.Set("message_thread_id", strconv.FormatInt(threadID, 10))
 	}
 	var msg message
 	if err := c.call("sendMessage", params, &msg); err != nil {
@@ -173,3 +178,73 @@ func (c *telegramClient) getChatAdministrators(chatID int64) ([]chatMember, erro
 	}
 	return admins, nil
 }
+
+// forumTopic 话题结构
+type forumTopic struct {
+	MessageThreadID   int64  `json:"message_thread_id"`
+	Name              string `json:"name"`
+	IconColor         int    `json:"icon_color"`
+	IconCustomEmojiID string `json:"icon_custom_emoji_id,omitempty"`
+}
+
+// sticker 贴纸结构（用于获取话题图标）
+type sticker struct {
+	CustomEmojiID string `json:"custom_emoji_id"`
+	Emoji         string `json:"emoji"`
+}
+
+// cachedTopicIconEmojis 缓存的话题图标 emoji
+var cachedTopicIconEmojis []sticker
+
+// getForumTopicIconStickers 获取可用的话题图标 emoji 列表
+func (c *telegramClient) getForumTopicIconStickers() ([]sticker, error) {
+	// 如果已缓存，直接返回
+	if len(cachedTopicIconEmojis) > 0 {
+		return cachedTopicIconEmojis, nil
+	}
+	
+	var stickers []sticker
+	if err := c.call("getForumTopicIconStickers", nil, &stickers); err != nil {
+		return nil, err
+	}
+	
+	// 缓存结果
+	cachedTopicIconEmojis = stickers
+	Logger.Debug("📦 Fetched %d forum topic icon stickers from Telegram", len(stickers))
+	return stickers, nil
+}
+
+// createForumTopic 在群组中创建话题
+// 返回创建的话题 ID，图标随机选择 emoji
+func (c *telegramClient) createForumTopic(chatID int64, name string) (*forumTopic, error) {
+	params := url.Values{}
+	params.Set("chat_id", strconv.FormatInt(chatID, 10))
+	params.Set("name", name)
+	
+	// 获取可用的 emoji 图标并随机选择
+	stickers, err := c.getForumTopicIconStickers()
+	if err != nil {
+		log.Printf("❌ Failed to get topic icon stickers: %v", err)
+		return nil, err
+	}
+	
+	if len(stickers) > 0 {
+		idx := time.Now().UnixNano() % int64(len(stickers))
+		emoji := stickers[idx]
+		// 同时尝试两个可能的参数名，以防万一
+		params.Set("icon_custom_emoji_id", emoji.CustomEmojiID)
+		
+		Logger.Debug("🎨 Choosing topic icon: %s (id: %s) for topic '%s'", emoji.Emoji, emoji.CustomEmojiID, name)
+	} else {
+		Logger.Debug("⚠️ No stickers returned from getForumTopicIconStickers")
+	}
+	
+	var topic forumTopic
+	if err := c.call("createForumTopic", params, &topic); err != nil {
+		log.Printf("❌ Failed to create forum topic: %v", err)
+		return nil, err
+	}
+	Logger.Debug("✅ Forum topic created (thread_id: %d)", topic.MessageThreadID)
+	return &topic, nil
+}
+

@@ -29,6 +29,7 @@ type gitCommit struct {
 }
 
 type gitHubRepo struct {
+	Name          string `json:"name"`
 	DefaultBranch string `json:"default_branch"`
 }
 
@@ -150,20 +151,20 @@ func getLatestCommit(client *http.Client, repo, branch string) (*gitCommit, erro
 	return &commits[0], nil
 }
 
-// getRepoDefaultBranch 获取仓库的默认分支
-func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
+// getRepoInfo 获取仓库信息（名称、默认分支等）
+func getRepoInfo(client *http.Client, repo string) (*gitHubRepo, error) {
 	endpoint := fmt.Sprintf("https://api.github.com/repos/%s", repo)
-	Logger.Debug("🐙 GitHub API: GET %s (fetching default branch)", endpoint)
+	Logger.Debug("🐙 GitHub API: GET %s (fetching repo info)", endpoint)
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	setGitHubHeaders(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("❌ Failed to get repo info for %s: %v", repo, err)
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -171,16 +172,16 @@ func getRepoDefaultBranch(client *http.Client, repo string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("❌ GitHub API returned status %d for repo %s", resp.StatusCode, repo)
-		return "", fmt.Errorf("failed to get repo info: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get repo info: status %d", resp.StatusCode)
 	}
 
 	var repoInfo gitHubRepo
 	if err := json.NewDecoder(resp.Body).Decode(&repoInfo); err != nil {
 		log.Printf("❌ Failed to decode repo info for %s: %v", repo, err)
-		return "", err
+		return nil, err
 	}
-	Logger.Debug("✔️ Default branch for %s: %s", repo, repoInfo.DefaultBranch)
-	return repoInfo.DefaultBranch, nil
+	Logger.Debug("✔️ Repo name: %s, Default branch: %s", repoInfo.Name, repoInfo.DefaultBranch)
+	return &repoInfo, nil
 }
 
 // scheduledChecker 定时检查器
@@ -228,8 +229,9 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								if targetID == 0 {
 									targetID = adminID
 								}
-								Logger.Debug("  📤 Sending release notification to %d", targetID)
-								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
+								threadID := configs[i].ThreadID
+								Logger.Debug("  📤 Sending release notification to %d (topic: %d)", targetID, threadID)
+								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "", threadID)
 							} else {
 								Logger.Debug("  ℹ️ Initial release recorded for %s: %s (ID: %d)", configs[i].Repo, release.TagName, release.ID)
 							}
@@ -248,13 +250,16 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 				if configs[i].MonitorCommit {
 					branch := configs[i].Branch
 					if branch == "" {
-						Logger.Debug("  🔍 Fetching default branch for %s", configs[i].Repo)
-						defaultBr, err := getRepoDefaultBranch(httpClient, configs[i].Repo)
+						Logger.Debug("  🔍 Fetching repo info for %s", configs[i].Repo)
+						info, err := getRepoInfo(httpClient, configs[i].Repo)
 						if err != nil {
-							log.Printf("  ⚠️ Failed to get default branch for %s, using 'main': %v", configs[i].Repo, err)
+							log.Printf("  ⚠️ Failed to get repo info for %s, using 'main': %v", configs[i].Repo, err)
 							branch = "main"
 						} else {
-							branch = defaultBr
+							branch = info.DefaultBranch
+							if configs[i].RepoName == "" {
+								configs[i].RepoName = info.Name
+							}
 						}
 						// 缓存到配置，下次无需再请求 API
 						configs[i].Branch = branch
@@ -295,8 +300,9 @@ func scheduledChecker(tg *telegramClient, adminID int64) {
 								if targetID == 0 {
 									targetID = adminID
 								}
-								Logger.Debug("  📤 Sending commit notification to %d", targetID)
-								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "")
+								threadID := configs[i].ThreadID
+								Logger.Debug("  📤 Sending commit notification to %d (topic: %d)", targetID, threadID)
+								tg.sendMessage(targetID, msg, telegramParseModeMarkdown, true, "", threadID)
 							} else {
 								Logger.Debug("  ℹ️ Initial commit recorded for %s:%s: %.7s", configs[i].Repo, branch, commit.SHA)
 							}

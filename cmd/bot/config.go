@@ -13,8 +13,10 @@ import (
 // repoConfig 仓库配置
 type repoConfig struct {
 	Repo           string  `json:"repo"`
+	RepoName       string  `json:"repo_name,omitempty"` // 不带所有者的仓库名
 	ChannelID      int64   `json:"channel_id,omitempty"`
 	ChannelTitle   string  `json:"channel_title,omitempty"`
+	ThreadID       int64   `json:"thread_id,omitempty"`
 	MonitorRelease bool    `json:"monitor_releases"`
 	MonitorCommit  bool    `json:"monitor_commits"`
 	Branch         string  `json:"branch,omitempty"`

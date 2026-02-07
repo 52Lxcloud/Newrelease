@@ -20,6 +20,7 @@ var Messages = struct {
 	ErrorUnexpected      func() string
 	ErrorDeleteFormat    func() string
 	ErrorInvalidIndex    func() string
+	ErrorCreateTopic     func() string
 
 	// 成功消息
 	SuccessAdded   func(repo, target, monitorType, branchInfo string) string
@@ -50,12 +51,12 @@ var Messages = struct {
 			"  选项：",
 			MDV2.Nbsp(" ", MDV2.CodeRaw("-r"), ":", "监控 Release"),
 			MDV2.Nbsp(" ", MDV2.CodeRaw("-c"), ":", "监控 Commit"),
-			MDV2.Nbsp(" ", MDV2.CodeRaw("@channel"), ":", "发送到指定频道（默认私聊）"),
+			MDV2.Nbsp(" ", MDV2.CodeRaw("@group"), ":", "发送到指定频道/群组"),
 			"",
 			"  示例：",
 			MDV2.Nbsp(" ", MDV2.CodeRaw("/add nginx/nginx:master -r")),
 			MDV2.Nbsp(" ", MDV2.CodeRaw("/add golang/go:dev -c")),
-			MDV2.Nbsp(" ", MDV2.CodeRaw("/add facebook/react")),
+			MDV2.Nbsp(" ", MDV2.CodeRaw("/add facebook/react @my_group")),
 			"",
 			MDV2.Nbsp("•", MDV2.CodeRaw("/delete <序号>"), "\\-", "删除监控"),
 			MDV2.Nbsp(" ", "示例：", MDV2.CodeRaw("/delete 1")),
@@ -63,7 +64,8 @@ var Messages = struct {
 			MDV2.Bold("提示："),
 			"• 默认监控 Release 和 Commit",
 			MDV2.Nbsp("•", "用", MDV2.CodeRaw(":branch"), "快速指定其他分支"),
-			"• 频道需先添加机器人为管理员",
+			"• 频道/群组需先添加机器人为管理员",
+			"• 开启话题的群组会自动创建仓库话题",
 		)
 	},
 
@@ -141,6 +143,14 @@ var Messages = struct {
 
 	ErrorInvalidIndex: func() string {
 		return "❌ 序号必须是大于 0 的数字！"
+	},
+
+	ErrorCreateTopic: func() string {
+		return MDV2.JoinLines(
+			MDV2.Nbsp("❌", MDV2.Bold("创建话题失败")),
+			"",
+			"请确保机器人有创建话题的权限",
+		)
 	},
 
 	// ============================================

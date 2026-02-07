@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -48,7 +49,11 @@ func buildRepoListMessage() (string, error) {
 			if channelTitle != "" {
 				target = MDV2.Escape(channelTitle)
 			} else {
-				target = "频道"
+				target = "群组"
+			}
+			// 如果有话题，显示 群组 > 话题名（话题名就是仓库名）
+			if cfg.ThreadID > 0 {
+				target = fmt.Sprintf("%s \\> %s", target, MDV2.Escape(cfg.RepoName))
 			}
 		}
 

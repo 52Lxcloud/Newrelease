@@ -36,7 +36,7 @@ func handleMessage(tg *telegramClient, msg *message, adminID int64) {
 
 // handleStart 处理 /start 命令
 func handleStart(tg *telegramClient, chatID int64) {
-	tg.sendMessage(chatID, Messages.Help(), telegramParseModeMarkdown, false, "")
+	tg.sendMessage(chatID, Messages.Help(), telegramParseModeMarkdown, false, "", 0)
 }
 
 // handleList 处理 /list 命令
@@ -44,10 +44,10 @@ func handleList(tg *telegramClient, chatID int64) {
 	msg, err := buildRepoListMessage()
 	if err != nil {
 		log.Printf("Failed to build repo list: %v", err)
-		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
-	tg.sendMessage(chatID, msg, telegramParseModeMarkdown, false, "")
+	tg.sendMessage(chatID, msg, telegramParseModeMarkdown, false, "", 0)
 }
 
 // handleAdd 处理 /add 命令
@@ -55,14 +55,14 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	// 解析命令参数
 	args := strings.Fields(text)
 	if len(args) < 2 {
-		tg.sendMessage(chatID, Messages.ErrorFormat(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorFormat(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	repo := args[1]
 	
 	// 支持 owner/repo:branch 格式
-	branch := "" // Initialize branch here
+	branch := ""
 	if strings.Contains(repo, ":") {
 		parts := strings.SplitN(repo, ":", 2)
 		repo = parts[0]
@@ -70,13 +70,13 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	}
 
 	if !repoRegexp.MatchString(repo) {
-		tg.sendMessage(chatID, Messages.ErrorInvalidRepo(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorInvalidRepo(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	monitorRelease := false
 	monitorCommit := false
-	channelUsername := ""
+	chatTarget := "" // 可以是 @username 或群组 ID
 
 	// 解析参数
 	for i := 2; i < len(args); i++ {
@@ -86,10 +86,23 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		case "-c":
 			monitorCommit = true
 		default:
+			// 支持 @username 格式
 			if strings.HasPrefix(args[i], "@") {
-				channelUsername = args[i]
+				chatTarget = args[i]
+			} else if strings.HasPrefix(args[i], "-") && len(args[i]) > 1 {
+				// 支持群组 ID 格式（负数，如 -1003786162788）
+				if _, err := strconv.ParseInt(args[i], 10, 64); err == nil {
+					chatTarget = args[i]
+				}
 			}
 		}
+	}
+	// 获取仓库信息（验证仓库存在并获取名称/默认分支）
+	repoInfo, err := getRepoInfo(httpClient, repo)
+	if err != nil {
+		log.Printf("Failed to get repo info for %s: %v", repo, err)
+		tg.sendMessage(chatID, Messages.ErrorInvalidRepo(), telegramParseModeMarkdown, false, "", 0)
+		return
 	}
 	// 如果没有指定监控类型，默认两者都监控
 	if !monitorRelease && !monitorCommit {
@@ -97,32 +110,29 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		monitorCommit = true
 	}
 
-	// 如果 branch 仍然为空，则从 GitHub 获取默认分支
-	if branch == "" && monitorCommit {
-		defaultBr, err := getRepoDefaultBranch(httpClient, repo)
-		if err != nil {
-			log.Printf("Failed to get default branch for %s: %v, using 'main'", repo, err)
-			branch = "main"
-		} else {
-			branch = defaultBr
-		}
+	// 如果 branch 仍然为空，使用 GitHub 返回的默认分支
+	if branch == "" {
+		branch = repoInfo.DefaultBranch
 	}
 
-	// 处理频道
+	// 处理频道/群组
 	var channelID int64
 	var channelTitle string
-	if channelUsername != "" {
-		chat, err := tg.getChat(channelUsername)
+	var threadID int64 = 0
+	var tgChat *chat
+	
+	if chatTarget != "" {
+		c, err := tg.getChat(chatTarget)
 		if err != nil {
-			log.Printf("Failed to get chat %s: %v", channelUsername, err)
-			tg.sendMessage(chatID, Messages.ErrorChannelNotFound(), telegramParseModeMarkdown, false, "")
+			log.Printf("Failed to get chat %s: %v", chatTarget, err)
+			tg.sendMessage(chatID, Messages.ErrorChannelNotFound(), telegramParseModeMarkdown, false, "", 0)
 			return
 		}
 		
 		// 检查机器人是否为管理员
-		admins, err := tg.getChatAdministrators(chat.ID)
+		admins, err := tg.getChatAdministrators(c.ID)
 		if err != nil {
-			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "")
+			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "", 0)
 			return
 		}
 		
@@ -135,12 +145,13 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 		}
 		
 		if !isAdmin {
-			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "")
+			tg.sendMessage(chatID, Messages.ErrorBotNotAdmin(), telegramParseModeMarkdown, false, "", 0)
 			return
 		}
 		
-		channelID = chat.ID
-		channelTitle = chat.Title
+		channelID = c.ID
+		channelTitle = c.Title
+		tgChat = c
 	} else {
 		channelTitle = "私聊"
 	}
@@ -149,37 +160,66 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 	configs, err := loadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
-		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "", 0)
 		return
+	}
+
+	// 检查重复（在创建话题之前检查）
+	// 如果由于没有 ThreadID 无法完全匹配，我们也应该检查该仓库是否已经在这个频道以相同的配置存在
+	for _, cfg := range configs {
+		if cfg.Repo == repo &&
+			cfg.ChannelID == channelID &&
+			cfg.MonitorRelease == monitorRelease &&
+			cfg.MonitorCommit == monitorCommit &&
+			cfg.Branch == branch {
+			tg.sendMessage(chatID, Messages.ErrorRepoExists(), telegramParseModeMarkdown, false, "", 0)
+			return
+		}
+	}
+
+	// 如果是开启话题功能的群组，自动创建话题
+	if tgChat != nil && tgChat.IsForum {
+		topicName := repoInfo.Name
+		topic, err := tg.createForumTopic(tgChat.ID, topicName)
+		if err != nil {
+			log.Printf("Failed to create forum topic for %s: %v", repo, err)
+			tg.sendMessage(chatID, Messages.ErrorCreateTopic(), telegramParseModeMarkdown, false, "", 0)
+			return
+		}
+		threadID = topic.MessageThreadID
+		log.Printf("📝 Created topic '%s' (thread_id: %d) in %s", topicName, threadID, channelTitle)
 	}
 
 	// 创建新配置
 	newConfig := repoConfig{
 		Repo:           repo,
+		RepoName:       repoInfo.Name,
 		ChannelID:      channelID,
 		ChannelTitle:   channelTitle,
+		ThreadID:       threadID,
 		MonitorRelease: monitorRelease,
 		MonitorCommit:  monitorCommit,
 		Branch:         branch,
-	}
-
-	// 检查重复
-	if isDuplicateConfig(configs, newConfig) {
-		tg.sendMessage(chatID, Messages.ErrorRepoExists(), telegramParseModeMarkdown, false, "")
-		return
 	}
 
 	// 添加并保存
 	configs = append(configs, newConfig)
 	if err := saveConfigs(configs); err != nil {
 		log.Printf("Failed to save configs: %v", err)
-		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	// 构建成功消息
-	notifyWay := channelTitle
-	if channelTitle == "" {
+	var notifyWay string
+	if threadID > 0 {
+		// 群组 + 话题
+		notifyWay = fmt.Sprintf("%s \\> %s", MDV2.Escape(channelTitle), MDV2.Escape(repoInfo.Name))
+	} else if channelID != 0 {
+		// 频道/群组
+		notifyWay = MDV2.Escape(channelTitle)
+	} else {
+		// 私聊
 		notifyWay = "私聊"
 	}
 
@@ -199,38 +239,42 @@ func handleAdd(tg *telegramClient, chatID int64, text string) {
 
 	successMsg := Messages.SuccessAdded(
 		MDV2.Escape(repo),
-		MDV2.Escape(notifyWay),
+		notifyWay,
 		monitorTypeStr,
 		branchInfo,
 	)
 
-	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
-	log.Printf("➕ Added: %s", repo)
+	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "", 0)
+	if threadID > 0 {
+		log.Printf("➕ Added: %s -> %s (topic: %d)", repo, channelTitle, threadID)
+	} else {
+		log.Printf("➕ Added: %s", repo)
+	}
 }
 
 // handleDelete 处理 /delete 命令
 func handleDelete(tg *telegramClient, chatID int64, text string) {
 	args := strings.Fields(text)
 	if len(args) < 2 {
-		tg.sendMessage(chatID, Messages.ErrorDeleteFormat(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorDeleteFormat(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	index, err := strconv.Atoi(args[1])
 	if err != nil || index < 1 {
-		tg.sendMessage(chatID, "❌ 序号必须是大于 0 的数字！", "", false, "")
+		tg.sendMessage(chatID, "❌ 序号必须是大于 0 的数字！", "", false, "", 0)
 		return
 	}
 
 	configs, err := loadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
-		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	if index > len(configs) {
-		tg.sendMessage(chatID, fmt.Sprintf("❌ 序号超出范围！当前只有 %d 个仓库。", len(configs)), "", false, "")
+		tg.sendMessage(chatID, fmt.Sprintf("❌ 序号超出范围！当前只有 %d 个仓库。", len(configs)), "", false, "", 0)
 		return
 	}
 
@@ -240,25 +284,11 @@ func handleDelete(tg *telegramClient, chatID int64, text string) {
 
 	if err := saveConfigs(configs); err != nil {
 		log.Printf("Failed to save configs: %v", err)
-		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "")
+		tg.sendMessage(chatID, Messages.ErrorUnexpected(), telegramParseModeMarkdown, false, "", 0)
 		return
 	}
 
 	successMsg := Messages.SuccessDeleted(MDV2.Escape(deletedRepo))
-	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "")
+	tg.sendMessage(chatID, successMsg, telegramParseModeMarkdown, false, "", 0)
 	log.Printf("🗑️ Deleted: %s", deletedRepo)
-}
-
-// isDuplicateConfig 检查是否存在重复配置
-func isDuplicateConfig(configs []repoConfig, newConfig repoConfig) bool {
-	for _, cfg := range configs {
-		if cfg.Repo == newConfig.Repo &&
-			cfg.ChannelID == newConfig.ChannelID &&
-			cfg.MonitorRelease == newConfig.MonitorRelease &&
-			cfg.MonitorCommit == newConfig.MonitorCommit &&
-			cfg.Branch == newConfig.Branch {
-			return true
-		}
-	}
-	return false
 }
